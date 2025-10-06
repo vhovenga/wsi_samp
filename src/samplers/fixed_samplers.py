@@ -61,7 +61,7 @@ class UseAllSampler(NonLearnableSampler):
 
     def sample(
         self,
-        scores: Optional[torch.Tensor],    # always None here
+        scores: Optional[torch.Tensor],    
         coord_mask: torch.Tensor,          # [B, Nmax] bool
     ) -> Tuple[List[torch.Tensor], Dict[str, Any]]:
         B, Nmax = coord_mask.shape
@@ -69,7 +69,6 @@ class UseAllSampler(NonLearnableSampler):
         idx_list: List[torch.Tensor] = []
         for b in range(B):
             valid = torch.nonzero(coord_mask[b], as_tuple=False).squeeze(1)  # [N_b]
-            # valid already holds the absolute indices into the padded row
             idx_list.append(valid.to(device=device, dtype=torch.long))
         return idx_list, {"method": "return_all"}
     

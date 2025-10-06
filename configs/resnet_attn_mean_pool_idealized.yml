@@ -4,10 +4,10 @@ run_name: "resnet_mean_pool_frozen_baseline"
 model:
   feature_extractor:
     name: ResNetFeatureExtractor
-    freeze: true  
+    freeze: false  
     
   aggregator:
-    name: MeanPoolAggregator
+    name: AttnMeanPoolAggregator
   classifier:
     name: LinearClassifier
 
@@ -30,7 +30,7 @@ loss:
 optimizer:
   name: Adam
   params:
-    lr: 1.0e-4
+    lr: 1.0e-3
     weight_decay: 1.0e-4
 
 data:
@@ -40,7 +40,7 @@ data:
   split: "train"          
 
 trainer:
-  max_epochs: 100
+  max_epochs: 20
   accelerator: gpu
   devices: 1
   log_every_n_steps: 20  

@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     # 80/20 slide-level split (reproducible)
     n_total = len(ref_ds)
-    n_train = int(0.8 * n_total)
+    n_train = int(0.6 * n_total)
     n_val   = n_total - n_train
     g = torch.Generator().manual_seed(cfg.get("seed", 42))
     perm = torch.randperm(n_total, generator=g).tolist()

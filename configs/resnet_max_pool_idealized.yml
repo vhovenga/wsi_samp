@@ -1,13 +1,13 @@
 seed: 42
-run_name: "resnet_mean_pool_frozen_baseline"
+run_name: "resnet_max_pool_frozen_baseline"
 
 model:
   feature_extractor:
     name: ResNetFeatureExtractor
-    freeze: true  
+    freeze: false  
     
   aggregator:
-    name: MeanPoolAggregator
+    name: MaxPoolAggregator
   classifier:
     name: LinearClassifier
 

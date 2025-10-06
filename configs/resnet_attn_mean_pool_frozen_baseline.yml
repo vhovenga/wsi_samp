@@ -1,5 +1,5 @@
 seed: 42
-run_name: "resnet_mean_pool_frozen_baseline"
+run_name: "resnet_attn_mean_pool_frozen_baseline"
 
 model:
   feature_extractor:
@@ -7,7 +7,7 @@ model:
     freeze: true  
     
   aggregator:
-    name: MeanPoolAggregator
+    name: AttnMeanPoolAggregator
   classifier:
     name: LinearClassifier
 

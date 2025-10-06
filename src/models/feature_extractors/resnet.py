@@ -4,46 +4,54 @@ import torchvision.models as tvm
 
 class ResNetFeatureExtractor(nn.Module):
     """
-    Minimal ResNet feature extractor.
-    - Accepts inputs of shape:
-        * (B, K, 3, H, W)  -> returns (B, K, D)
-        * (N, 3, H, W)     -> returns (N, D)
-    - No transforms, no resizing, no dataloaders/utilities.
-    - Global-average-pooled features (fc replaced by Identity).
-    - D is 512 for resnet18/34, 2048 for resnet50/101/152.
+    Minimal ResNet feature extractor with automatic pretrained weights.
 
-    Args:
-        model_name: one of {"resnet18","resnet34","resnet50","resnet101","resnet152"}.
-        weights: torchvision weights object or None. Example:
-                 tvm.ResNet50_Weights.DEFAULT (for ImageNet pretrained).
-                 If you're on an older torchvision, pass None and load weights manually if needed.
-        train_backbone: if False, backbone is frozen (feature extractor mode).
-        return_sequence: if True and input is (B,K,...) return (B,K,D); otherwise flatten to (N,D).
+    - Supports resnet18/34/50/101/152.
+    - Automatically loads torchvision pretrained weights.
+    - Returns global-average-pooled features (fc replaced by Identity).
+    - Output dim: 512 for 18/34, 2048 for 50/101/152.
+
+    Input:
+        (B, K, 3, H, W) -> (B, K, D)
+        (N, 3, H, W)    -> (N, D)
     """
     def __init__(
         self,
         model_name: str = "resnet50",
-        weights=None,
+        pretrained: bool = True,
         train_backbone: bool = True,
         return_sequence: bool = False,
     ):
         super().__init__()
         model_name = model_name.lower()
+        assert model_name in {"resnet18", "resnet34", "resnet50", "resnet101", "resnet152"}, \
+            f"Unsupported model: {model_name}"
+
+        # --- Auto-load appropriate weights ---
+        if pretrained:
+            weights_enum = {
+                "resnet18": tvm.ResNet18_Weights.DEFAULT,
+                "resnet34": tvm.ResNet34_Weights.DEFAULT,
+                "resnet50": tvm.ResNet50_Weights.DEFAULT,
+                "resnet101": tvm.ResNet101_Weights.DEFAULT,
+                "resnet152": tvm.ResNet152_Weights.DEFAULT,
+            }[model_name]
+        else:
+            weights_enum = None
+
+        # --- Construct backbone ---
         ctor = getattr(tvm, model_name)
-        self.backbone = ctor(weights=weights)
-        # Replace classification head with Identity; keeps avgpool+flatten inside
+        self.backbone = ctor(weights=weights_enum)
         self.backbone.fc = nn.Identity()
 
-        # Infer output dim
-        if model_name in ("resnet18", "resnet34"):
-            self.out_dim = 512
-        else:
-            self.out_dim = 2048
+        # --- Output dim ---
+        self.out_dim = 512 if model_name in ("resnet18", "resnet34") else 2048
 
-        # Freeze if requested
+        # --- Optionally freeze ---
         if not train_backbone:
             for p in self.backbone.parameters():
                 p.requires_grad = False
+
         self.return_sequence = return_sequence
 
     @torch.no_grad()
@@ -59,12 +67,11 @@ class ResNetFeatureExtractor(nn.Module):
         if x.dim() == 5:
             B, K, C, H, W = x.shape
             x = x.view(B * K, C, H, W)
-            feats = self.backbone(x)  # (B*K, D)
+            feats = self.backbone(x)
             if self.return_sequence:
-                feats = feats.view(B, K, self.out_dim)  # (B, K, D)
+                feats = feats.view(B, K, self.out_dim)
             return feats
         elif x.dim() == 4:
-            # (N, 3, H, W)
-            return self.backbone(x)  # (N, D)
+            return self.backbone(x)
         else:
-            raise ValueError(f"Expected 4D or 5D tensor, got shape {tuple(x.shape)}")
+            raise ValueError(f"Expected 4D or 5D tensor, got {tuple(x.shape)}")
