@@ -1,5 +1,5 @@
 seed: 42
-run_name: "resnet_max_pool_frozen_baseline"
+run_name: "resnet_max_pool_uniform"
 
 model:
   feature_extractor:
@@ -15,7 +15,11 @@ model:
 
 samplers:
   train:
-    name: UseAllSampler
+    name: UniformSampler
+    params:
+      sample_size: 16
+      with_replacement: false
+
   val:
     name: UseAllSampler
   test:
@@ -30,7 +34,7 @@ loss:
 optimizer:
   name: Adam
   params:
-    lr: 1.0e-4
+    lr: 1.0e-3
     weight_decay: 1.0e-4
 
 data:

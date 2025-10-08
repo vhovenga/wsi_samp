@@ -1,13 +1,13 @@
 seed: 42
-run_name: "resnet_mean_pool_uniform"
+run_name: "resnet_max_pool_feature_dpp"
 
 model:
   feature_extractor:
     name: ResNetFeatureExtractor
-    freeze: false   
+    freeze: false  
     
   aggregator:
-    name: MeanPoolAggregator
+    name: MaxPoolAggregator
   classifier:
     name: LinearClassifier
 
@@ -15,15 +15,16 @@ model:
 
 samplers:
   train:
-    name: UniformSampler
+    name: FixedFeatureDppSampler
     params:
-      sample_size: 63
-      with_replacement: false
+      method: "standard"
+      random_proj_dim: 16
+
   val:
     name: UseAllSampler
   test:
     name: UseAllSampler
-
+  
 loss:
   mil_loss:
     name: BCE
@@ -34,19 +35,19 @@ optimizer:
   name: Adam
   params:
     lr: 1.0e-3
-    weight_decay: 1.0e-5
+    weight_decay: 1.0e-4
 
 data:
   root: "/home/alpaca/Documents/van/wsi_sampling/data/toy_set"
   batch_size: 4           
   num_workers: 8
-  split: "train"         
+  split: "train"          
 
 trainer:
   max_epochs: 100
   accelerator: gpu
   devices: 1
-  log_every_n_steps: 20
+  log_every_n_steps: 20  
 
 metrics:
   train:

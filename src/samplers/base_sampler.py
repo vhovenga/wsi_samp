@@ -17,15 +17,19 @@ class BaseSampler(nn.Module):
       - Static method that turns scores+mask into per-slide index lists.
       - You can reuse it from your subclass or override if you need custom behavior.
     """
-    def __init__(self, sample_kwargs: Dict[str, Any] = {}):
+    def __init__(
+            self, 
+            sample_kwargs: Dict[str, Any] = {},
+            forward_kwargs: Dict[str, Any] = {}
+            ):
         super().__init__()
         self.sample_kwargs = sample_kwargs # dynamic knobs (temperature, method, etc.)
+        self.forward_kwargs = forward_kwargs
 
     def forward(
         self,
-        lowres: torch.Tensor,          # [B,C,H0,W0]
-        coords_pad: torch.Tensor,      # [B,Nmax,2] (normalized or raw)
-        coord_mask: torch.Tensor,      # [B,Nmax] bool
+        batch: Dict[str, Any],
+        forward_kwargs: Dict[str, Any] = {}
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         raise NotImplementedError
 
@@ -53,7 +57,7 @@ class BaseSampler(nn.Module):
         fetched, lengths = [], []
         for view, idxs_dev in zip(views, idx_list):
             idxs = idxs_dev.detach().cpu().tolist()
-            imgs = view.fetch(idxs)
+            imgs = view.fetch_tiles(idxs)
             fetched.append(imgs)
             lengths.append(imgs.shape[0])
 
@@ -76,13 +80,16 @@ class BaseSampler(nn.Module):
 
 class NonLearnableSampler(BaseSampler):
     @torch.no_grad()
-    def select_and_fetch(self, batch: Dict[str, Any], device: torch.device):
-        lowres = batch["lowres"].to(device, non_blocking=True)
-        coords_pad = batch["coords_pad"].to(device, non_blocking=True)
+    def select_and_fetch(
+        self,
+        batch: Dict[str, Any], 
+        device: torch.device, 
+        ):
+
         coord_mask = batch["coord_mask"].to(device, non_blocking=True)
         views = batch["views"]
 
-        scores, aux_fwd = self.forward(lowres, coords_pad, coord_mask)
+        scores, aux_fwd = self.forward(batch, **self.forward_kwargs)
         idx_list, aux_sel = self.sample(scores, coord_mask, **self.sample_kwargs)
         aux = {**aux_fwd, **aux_sel}
 
@@ -90,19 +97,20 @@ class NonLearnableSampler(BaseSampler):
         return self._fetch_tiles(views, idx_list, coord_mask.device, aux)
     
 class LearnableSampler(BaseSampler):
-    def select_and_fetch(self, batch: Dict[str, Any], device: torch.device):
-        lowres = batch["lowres"].to(device, non_blocking=True)
-        coords_pad = batch["coords_pad"].to(device, non_blocking=True)
+    def select_and_fetch(
+            self, 
+            batch: Dict[str, Any], 
+            device: torch.device,
+            ):
         coord_mask = batch["coord_mask"].to(device, non_blocking=True)
         views = batch["views"]
 
         # forward tracked by autograd → grads will flow into sampler params
-        scores, aux_fwd = self.forward(lowres, coords_pad, coord_mask)
+        scores, aux_fwd = self.forward(batch, **self.forward_kwargs)
         idx_list, aux_sel = self.sample(scores, coord_mask, **self.sample_kwargs)
         aux = {**aux_fwd, **aux_sel}
 
         # explicitly clear big inputs (free memory after forward graph captured)
-        del lowres, coords_pad
         torch.cuda.empty_cache()   # optional, forces cache release
 
         return self._fetch_tiles(views, idx_list, coord_mask.device, aux)

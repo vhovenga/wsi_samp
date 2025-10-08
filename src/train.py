@@ -71,5 +71,5 @@ if __name__ == "__main__":
 
     lit_model = LitMIL(cfg)
     logger = TensorBoardLogger("../experiments", name=cfg.get("run_name", "mil_run"))
-    trainer = pl.Trainer(logger=logger, **cfg["trainer"])
+    trainer = pl.Trainer(logger=logger, **cfg["trainer"], num_sanity_val_steps=0)
     trainer.fit(lit_model, train_loader, val_loader)

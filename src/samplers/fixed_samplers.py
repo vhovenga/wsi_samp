@@ -7,7 +7,7 @@ class UniformSampler(NonLearnableSampler):
         super().__init__(sample_kwargs = {"sample_size": sample_size, "with_replacement": with_replacement})
 
 
-    def forward(self, lowres, coords_pad, coord_mask):
+    def forward(self, batch):
         # Return None for scores to indicate uniform
         scores = None
         return scores, {}
@@ -55,7 +55,7 @@ class UseAllSampler(NonLearnableSampler):
     def __init__(self):
         super().__init__()
 
-    def forward(self, lowres, coords_pad, coord_mask):
+    def forward(self, batch):
         # No scoring needed
         return None, {}
 

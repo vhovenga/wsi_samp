@@ -1,0 +1,209 @@
+
+============================================================
+🚀 STARTING TRAINING FOR CONFIG: resnet_max_pool_feature_dpp.yml
+============================================================
+
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+You are using a CUDA device ('NVIDIA RTX A6000') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0,1,2]
+
+  | Name          | Type                   | Params | Mode 
+-----------------------------------------------------------------
+0 | mil_module    | MILModule              | 24.6 M | train
+1 | mil_loss_fn   | BCELoss                | 0      | train
+2 | train_sampler | FixedFeatureDppSampler | 0      | train
+3 | val_sampler   | UseAllSampler          | 0      | train
+4 | test_sampler  | UseAllSampler          | 0      | train
+5 | train_metrics | MetricCollection       | 0      | train
+6 | val_metrics   | MetricCollection       | 0      | train
+7 | test_metrics  | MetricCollection       | 0      | train
+-----------------------------------------------------------------
+24.6 M    Trainable params
+0         Non-trainable params
+24.6 M    Total params
+98.235    Total estimated model params size (MB)
+174       Modules in train mode
+0         Modules in eval mode
+[SlideDataset] Merged features for 358 slides.
+Traceback (most recent call last):
+  File "/home/alpaca/Documents/van/wsi_sampling/src/train.py", line 75, in <module>
+    trainer.fit(lit_model, train_loader, val_loader)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/trainer/trainer.py", line 560, in fit
+    call._call_and_handle_interrupt(
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/trainer/call.py", line 49, in _call_and_handle_interrupt
+    return trainer_fn(*args, **kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/trainer/trainer.py", line 598, in _fit_impl
+    self._run(model, ckpt_path=ckpt_path)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/trainer/trainer.py", line 1011, in _run
+    results = self._run_stage()
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/trainer/trainer.py", line 1055, in _run_stage
+    self.fit_loop.run()
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/loops/fit_loop.py", line 216, in run
+    self.advance()
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/loops/fit_loop.py", line 458, in advance
+    self.epoch_loop.run(self._data_fetcher)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 152, in run
+    self.advance(data_fetcher)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 348, in advance
+    batch_output = self.automatic_optimization.run(trainer.optimizers[0], batch_idx, kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/loops/optimization/automatic.py", line 192, in run
+    self._optimizer_step(batch_idx, closure)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/loops/optimization/automatic.py", line 270, in _optimizer_step
+    call._call_lightning_module_hook(
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/trainer/call.py", line 177, in _call_lightning_module_hook
+    output = fn(*args, **kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/core/module.py", line 1366, in optimizer_step
+    optimizer.step(closure=optimizer_closure)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/core/optimizer.py", line 154, in step
+    step_output = self._strategy.optimizer_step(self._optimizer, closure, **kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/strategies/strategy.py", line 239, in optimizer_step
+    return self.precision_plugin.optimizer_step(optimizer, model=model, closure=closure, **kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/plugins/precision/precision.py", line 123, in optimizer_step
+    return optimizer.step(closure=closure, **kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/torch/optim/optimizer.py", line 516, in wrapper
+    out = func(*args, **kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/torch/optim/optimizer.py", line 81, in _use_grad
+    ret = func(*args, **kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/torch/optim/adam.py", line 226, in step
+    loss = closure()
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/plugins/precision/precision.py", line 109, in _wrap_closure
+    closure_result = closure()
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/loops/optimization/automatic.py", line 146, in __call__
+    self._result = self.closure(*args, **kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/loops/optimization/automatic.py", line 131, in closure
+    step_output = self._step_fn()
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/loops/optimization/automatic.py", line 319, in _training_step
+    training_step_output = call._call_strategy_hook(trainer, "training_step", *kwargs.values())
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/trainer/call.py", line 329, in _call_strategy_hook
+    output = fn(*args, **kwargs)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/pytorch_lightning/strategies/strategy.py", line 391, in training_step
+    return self.lightning_module.training_step(*args, **kwargs)
+  File "/home/alpaca/Documents/van/wsi_sampling/src/models/lit_module.py", line 65, in training_step
+    images_pad, mask_pad, sampler_aux = self.sampler_step(batch, "train")
+  File "/home/alpaca/Documents/van/wsi_sampling/src/models/lit_module.py", line 34, in sampler_step
+    images_pad, mask_pad, sampler_aux = sampler.select_and_fetch(batch, self.device)
+  File "/home/alpaca/anaconda3/envs/van-mil-samp/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/alpaca/Documents/van/wsi_sampling/src/samplers/base_sampler.py", line 97, in select_and_fetch
+    return self._fetch_tiles(views, idx_list, coord_mask.device, aux)
+  File "/home/alpaca/Documents/van/wsi_sampling/src/samplers/base_sampler.py", line 59, in _fetch_tiles
+    idxs = idxs_dev.detach().cpu().tolist()
+AttributeError: 'list' object has no attribute 'detach'
+
+============================================================
+✅ FINISHED CONFIG: resnet_max_pool_feature_dpp.yml
+============================================================
+
+
+============================================================
+🚀 STARTING TRAINING FOR CONFIG: resnet_max_pool_frozen_baseline.yml
+============================================================
+
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+You are using a CUDA device ('NVIDIA RTX A6000') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0,1,2]
+
+  | Name          | Type             | Params | Mode 
+-----------------------------------------------------------
+0 | mil_module    | MILModule        | 24.6 M | train
+1 | mil_loss_fn   | BCELoss          | 0      | train
+2 | train_sampler | UseAllSampler    | 0      | train
+3 | val_sampler   | UseAllSampler    | 0      | train
+4 | test_sampler  | UseAllSampler    | 0      | train
+5 | train_metrics | MetricCollection | 0      | train
+6 | val_metrics   | MetricCollection | 0      | train
+7 | test_metrics  | MetricCollection | 0      | train
+-----------------------------------------------------------
+1.1 M     Trainable params
+23.5 M    Non-trainable params
+24.6 M    Total params
+98.235    Total estimated model params size (MB)
+174       Modules in train mode
+0         Modules in eval mode
+[SlideDataset] Merged features for 358 slides.
+`Trainer.fit` stopped: `max_epochs=100` reached.
+
+============================================================
+✅ FINISHED CONFIG: resnet_max_pool_frozen_baseline.yml
+============================================================
+
+
+============================================================
+🚀 STARTING TRAINING FOR CONFIG: resnet_max_pool_idealized.yml
+============================================================
+
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+You are using a CUDA device ('NVIDIA RTX A6000') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0,1,2]
+
+  | Name          | Type             | Params | Mode 
+-----------------------------------------------------------
+0 | mil_module    | MILModule        | 24.6 M | train
+1 | mil_loss_fn   | BCELoss          | 0      | train
+2 | train_sampler | UseAllSampler    | 0      | train
+3 | val_sampler   | UseAllSampler    | 0      | train
+4 | test_sampler  | UseAllSampler    | 0      | train
+5 | train_metrics | MetricCollection | 0      | train
+6 | val_metrics   | MetricCollection | 0      | train
+7 | test_metrics  | MetricCollection | 0      | train
+-----------------------------------------------------------
+24.6 M    Trainable params
+0         Non-trainable params
+24.6 M    Total params
+98.235    Total estimated model params size (MB)
+174       Modules in train mode
+0         Modules in eval mode
+[SlideDataset] Merged features for 358 slides.
+`Trainer.fit` stopped: `max_epochs=100` reached.
+
+============================================================
+✅ FINISHED CONFIG: resnet_max_pool_idealized.yml
+============================================================
+
+
+============================================================
+🚀 STARTING TRAINING FOR CONFIG: resnet_max_pool_uniform.yml
+============================================================
+
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+You are using a CUDA device ('NVIDIA RTX A6000') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0,1,2]
+
+  | Name          | Type             | Params | Mode 
+-----------------------------------------------------------
+0 | mil_module    | MILModule        | 24.6 M | train
+1 | mil_loss_fn   | BCELoss          | 0      | train
+2 | train_sampler | UniformSampler   | 0      | train
+3 | val_sampler   | UseAllSampler    | 0      | train
+4 | test_sampler  | UseAllSampler    | 0      | train
+5 | train_metrics | MetricCollection | 0      | train
+6 | val_metrics   | MetricCollection | 0      | train
+7 | test_metrics  | MetricCollection | 0      | train
+-----------------------------------------------------------
+24.6 M    Trainable params
+0         Non-trainable params
+24.6 M    Total params
+98.235    Total estimated model params size (MB)
+174       Modules in train mode
+0         Modules in eval mode
+[SlideDataset] Merged features for 358 slides.
+`Trainer.fit` stopped: `max_epochs=100` reached.
+
+============================================================
+✅ FINISHED CONFIG: resnet_max_pool_uniform.yml
+============================================================
+

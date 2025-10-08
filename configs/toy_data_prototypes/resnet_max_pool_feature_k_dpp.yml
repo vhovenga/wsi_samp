@@ -1,10 +1,10 @@
 seed: 42
-run_name: "resnet_max_pool_frozen_baseline"
+run_name: "resnet_max_pool_feature_k_dpp"
 
 model:
   feature_extractor:
     name: ResNetFeatureExtractor
-    freeze: true  
+    freeze: false  
     
   aggregator:
     name: MaxPoolAggregator
@@ -15,7 +15,12 @@ model:
 
 samplers:
   train:
-    name: UseAllSampler
+    name: FixedFeatureDppSampler
+    params:
+      random_proj_dim: 128
+      method: "k_dpp"
+      k: 16
+
   val:
     name: UseAllSampler
   test:
@@ -30,7 +35,7 @@ loss:
 optimizer:
   name: Adam
   params:
-    lr: 1.0e-4
+    lr: 1.0e-3
     weight_decay: 1.0e-4
 
 data:
