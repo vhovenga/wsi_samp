@@ -8,8 +8,8 @@ model:
     
   aggregator:
     name: AttnMeanPoolAggregator
-  classifier:
-    name: LinearClassifier
+  predictor:
+    name: LinearPredictor
 
   micro_batch_size: 64
 

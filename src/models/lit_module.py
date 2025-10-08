@@ -36,8 +36,10 @@ class LitMIL(pl.LightningModule):
 
     # --- step 2: MIL forward ---
     def mil_step(self, images_pad: torch.Tensor, mask_pad: torch.Tensor):
-        out = self.mil_module(images=images_pad, mask=mask_pad)
-        return out  # dict with {"logits": [B,C], "Z": [B,D], "extras": ...}
+        bag_feats = self.mil_module.feature_extract(images=images_pad, mask=mask_pad)
+        agg_out = self.mil_module.aggregate(bag_feats, mask=mask_pad)
+        logits = self.mil_module.predictor(agg_out["Z"])
+        return {"logits": logits, "Z": agg_out["Z"], "extras": ...}
 
     # --- step 3: loss ---
     def loss_step(self, batch: Dict[str, Any], stage: str, mil_out: Dict[str, Any], sampler_aux: Dict[str, Any]):

@@ -1,7 +1,7 @@
 from .base import MILModule
 from .feature_extractors import FEATURE_EXTRACTORS
 from .aggregators import AGGREGATORS
-from .classifiers import CLASSIFIERS
+from .predictors import PREDICTORS
 
 
 def freeze_module(module):
@@ -19,9 +19,9 @@ def build_model(cfg):
     agg_cls = AGGREGATORS[cfg["aggregator"]["name"]]
     aggregator = agg_cls(**cfg["aggregator"].get("params", {}))
 
-    # Classifier
-    classifier_cls = CLASSIFIERS[cfg["classifier"]["name"]]
-    classifier = classifier_cls(**cfg["classifier"].get("params", {}))
+    # Predictor
+    predictor_cls = PREDICTORS[cfg["predictor"]["name"]]
+    predictor = predictor_cls(**cfg["predictor"].get("params", {}))
 
     # Micro batch size
     micro_k = cfg.get("micro_batch_size", 64)
@@ -29,6 +29,6 @@ def build_model(cfg):
     return MILModule(
         feature_extractor=feature_extractor,
         aggregator=aggregator,
-        classifier=classifier,
+        predictor=predictor,
         micro_k=micro_k,
     )

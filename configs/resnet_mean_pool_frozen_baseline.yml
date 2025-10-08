@@ -8,8 +8,8 @@ model:
     
   aggregator:
     name: MeanPoolAggregator
-  classifier:
-    name: LinearClassifier
+  predictor:
+    name: LinearPredictor
 
   micro_batch_size: 64
 

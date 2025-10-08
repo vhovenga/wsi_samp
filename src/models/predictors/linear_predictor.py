@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-class LinearClassifier(nn.Module):
+class LinearPredictor(nn.Module):
     """
-    Classifier head with optional hidden layers and normalization.
+    Predictor head with optional hidden layers and normalization.
     Takes bag-level embeddings of shape (B, D) and returns logits.
 
     Args:
