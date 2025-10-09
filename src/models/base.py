@@ -64,28 +64,33 @@ class MILModule(nn.Module):
         feats_per_bag: List[torch.Tensor],        # [1,Kb,D] per bag
         mask: Optional[torch.Tensor] = None
     ) -> Dict[str, Any]:
+   
         B = len(feats_per_bag)
-        Z_list: List[torch.Tensor] = []
-        extras_list: List[Any] = []
 
-        for b in range(B):
-            fb = feats_per_bag[b]
-            mb = None
-            if mask is not None:
-                Kb = fb.shape[1]
-                mb = mask[b, :Kb].to(self.device).unsqueeze(0)
+        # pad features to [B, Kmax, D]
+        Kmax = max(fb.shape[1] for fb in feats_per_bag)
+        D = feats_per_bag[0].shape[2]
+        feats_pad = torch.zeros(B, Kmax, D, device=self.device, dtype=feats_per_bag[0].dtype)
+        mask_pad = torch.zeros(B, Kmax, device=self.device, dtype=torch.bool)
 
-            out = self.aggregator(fb, mask=mb)
-            if isinstance(out, tuple):
-                z_b, extra_b = out
-                extras_list.append(extra_b)
-            else:
-                z_b = out
-                extras_list.append(None)
-            Z_list.append(z_b)
+        for b, fb in enumerate(feats_per_bag):
+            Kb = fb.shape[1]
+            feats_pad[b, :Kb] = fb.squeeze(0)
+            mask_pad[b, :Kb] = True
 
-        Z = torch.cat(Z_list, dim=0)  # [B,D]
-        return {"Z": Z, "extras": extras_list}
+        # attempt batched forward
+        out = self.aggregator(feats_pad, mask=mask_pad)
+
+        if isinstance(out, tuple):
+            Z, extras = out
+        else:
+            Z, extras = out, [None] * B
+
+        # ensure extras list type consistency
+        if not isinstance(extras, list):
+            extras = [extras for _ in range(B)]
+
+        return {"Z": Z, "extras": extras}
 
     # ---------------------------------------------------------
     # 3. Prediction (classification or regression)
