@@ -31,45 +31,53 @@ if __name__ == "__main__":
     patch_tfm = transforms.ToTensor()  # applied when fetching full patches
 
     # Build a reference dataset just to get the slide count for splitting
-    ref_ds = SlideDataset(
-        root=cfg["data"]["root"],
-        split=cfg["data"].get("split", "train"),
+    train_ds = SlideDataset(
+        **cfg["dataset"],
+        split="train",
         lowres_transform=lowres_tfm,
         patch_transform=patch_tfm,
     )
 
-    # 80/20 slide-level split (reproducible)
-    n_total = len(ref_ds)
-    n_train = int(0.6 * n_total)
-    n_val   = n_total - n_train
-    g = torch.Generator().manual_seed(cfg.get("seed", 42))
-    perm = torch.randperm(n_total, generator=g).tolist()
-    train_idx, val_idx = perm[:n_train], perm[n_train:]
+    val_ds = SlideDataset(
+        **cfg["dataset"],
+        split="val",
+        lowres_transform=lowres_tfm,
+        patch_transform=patch_tfm,
+    )
 
-    # Apply the same index split to each base dataset
-    train_ds = Subset(ref_ds, train_idx)
-    val_ds   = Subset(ref_ds,   val_idx)
 
     # Loaders: fixed-K train can use default; use padded collate for variable-K val
     train_loader = DataLoader(
         train_ds,
-        batch_size=cfg["data"]["batch_size"],
+        **cfg["dataloader"],
         shuffle=True,
-        num_workers=cfg["data"]["num_workers"],
         pin_memory=True,
         collate_fn=slide_collate
     )
 
     val_loader = DataLoader(
         val_ds,
-        batch_size=cfg["data"]["batch_size"],
+        **cfg["dataloader"],
         shuffle=False,
-        num_workers=cfg["data"]["num_workers"],
         pin_memory=True,
         collate_fn=slide_collate
     )
 
     lit_model = LitMIL(cfg)
-    logger = TensorBoardLogger("../experiments", name=cfg.get("run_name", "mil_run"))
-    trainer = pl.Trainer(logger=logger, **cfg["trainer"], num_sanity_val_steps=0)
+
+    trainer_cfg = dict(cfg["trainer"]) 
+    use_logger = trainer_cfg.pop("logger", True)  
+    if use_logger:
+        logger = TensorBoardLogger(
+            "../experiments",
+            name=cfg.get("run_name", "mil_run"),
+        )
+    else:
+        logger = False
+
+    trainer = pl.Trainer(
+        logger=logger,
+        **trainer_cfg
+    )
+
     trainer.fit(lit_model, train_loader, val_loader)

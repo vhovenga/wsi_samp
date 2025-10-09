@@ -31,23 +31,26 @@ loss:
     params:
       reduction: mean
 
-optimizer:
-  name: Adam
-  params:
-    lr: 1.0e-3
-    weight_decay: 1.0e-4
+dataset:
+  tiles_parquet: "../data/toy_set_h5/parquet/tiles.parquet"
+  labels_parquet: "../data/toy_set_h5/parquet/labels/slide_labels.parquet"
+  splits_parquet: "../data/toy_set_h5/parquet/splits/fold1.parquet"
+  features_parquet: "../data/toy_set_h5/parquet/features.parquet"
+  lowres_parquet: "../data/toy_set_h5/parquet/lowres/thumbnails.parquet"
 
-data:
-  root: "/home/alpaca/Documents/van/wsi_sampling/data/toy_set"
+dataloader:
   batch_size: 4           
   num_workers: 8
-  split: "train"          
 
 trainer:
   max_epochs: 100
   accelerator: gpu
   devices: 1
-  log_every_n_steps: 20  
+  logger: true
+  enable_checkpointing: false
+  enable_model_summary: false
+  num_sanity_val_steps: 0
+
 
 metrics:
   train:

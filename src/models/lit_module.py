@@ -1,10 +1,11 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 import pytorch_lightning as pl
 import torch
 from . import build_model
 from losses import build_loss
 from samplers import build_sampler
 from metrics import build_metrics
+from utils.bag_modifiers import build_bag_modifier
 
 class LitMIL(pl.LightningModule):
     def __init__(self, exp_cfg):
@@ -28,6 +29,9 @@ class LitMIL(pl.LightningModule):
         self.val_metrics = build_metrics(metrics_cfg.get("val", {}), prefix="val/")
         self.test_metrics = build_metrics(metrics_cfg.get("test", {}), prefix="test/")
 
+        bag_modifier_cfg = exp_cfg.get("bag_modifier", None)
+        self.bag_modifier = build_bag_modifier(bag_modifier_cfg) if bag_modifier_cfg is not None else None
+
     # --- step 1: sample patches ---
     def sampler_step(self, batch: Dict[str, Any], stage: str):
         sampler = self.train_sampler if stage == "train" else self.val_sampler
@@ -35,11 +39,16 @@ class LitMIL(pl.LightningModule):
         return images_pad, mask_pad, sampler_aux
 
     # --- step 2: MIL forward ---
-    def mil_step(self, images_pad: torch.Tensor, mask_pad: torch.Tensor):
+    def mil_step(self, images_pad: torch.Tensor, mask_pad: torch.Tensor, bag_ids: List[int]):
         bag_feats = self.mil_module.feature_extract(images=images_pad, mask=mask_pad)
         agg_out = self.mil_module.aggregate(bag_feats, mask=mask_pad)
-        logits = self.mil_module.predictor(agg_out["Z"])
-        return {"logits": logits, "Z": agg_out["Z"], "extras": ...}
+        Z = agg_out["Z"]
+
+        if self.trainer.training and self.bag_modifier is not None:
+            Z = self.bag_modifier.compute(bag_ids, Z)
+
+        logits = self.mil_module.predictor(Z)
+        return {"logits": logits, "Z": Z, "extras": agg_out["extras"]}
 
     # --- step 3: loss ---
     def loss_step(self, batch: Dict[str, Any], stage: str, mil_out: Dict[str, Any], sampler_aux: Dict[str, Any]):
@@ -65,7 +74,7 @@ class LitMIL(pl.LightningModule):
     # --- lightning hooks ---
     def training_step(self, batch, batch_idx):
         images_pad, mask_pad, sampler_aux = self.sampler_step(batch, "train")
-        mil_out = self.mil_step(images_pad, mask_pad)
+        mil_out = self.mil_step(images_pad, mask_pad, bag_ids=batch["slide_ids"])
         loss = self.loss_step(batch, "train", mil_out, sampler_aux)
 
         # raw outputs always; collection handles transforms internally
@@ -76,7 +85,7 @@ class LitMIL(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         images_pad, mask_pad, sampler_aux = self.sampler_step(batch, "val")
-        mil_out = self.mil_step(images_pad, mask_pad)
+        mil_out = self.mil_step(images_pad, mask_pad, bag_ids=batch["slide_ids"])
         loss = self.loss_step(batch, "val", mil_out, sampler_aux)
 
         preds_raw = mil_out["logits"]

@@ -1,5 +1,5 @@
 seed: 42
-run_name: "resnet_mean_pool_frozen_baseline"
+run_name: "debug"
 
 model:
   feature_extractor:
@@ -7,7 +7,7 @@ model:
     freeze: false  
     
   aggregator:
-    name: AttnMeanPoolAggregator
+    name: MaxPoolAggregator
   predictor:
     name: LinearPredictor
 
@@ -16,7 +16,12 @@ model:
 
 samplers:
   train:
-    name: UseAllSampler
+    name: FixedFeatureDppSampler
+    params:
+      random_proj_dim: 128
+      method: "k_dpp"
+      k: 16
+
   val:
     name: UseAllSampler
   test:
@@ -34,17 +39,31 @@ optimizer:
     lr: 1.0e-3
     weight_decay: 1.0e-4
 
-data:
-  root: "/home/alpaca/Documents/van/wsi_sampling/data/toy_set"
+bag_modifier:
+  name: BagEMABuffer
+  params:
+    alpha: 0.5
+
+dataset:
+  tiles_parquet: "../data/toy_set_h5/parquet/tiles.parquet"
+  labels_parquet: "../data/toy_set_h5/parquet/labels/slide_labels.parquet"
+  splits_parquet: "../data/toy_set_h5/parquet/splits/fold1.parquet"
+  features_parquet: "../data/toy_set_h5/parquet/features.parquet"
+  lowres_parquet: "../data/toy_set_h5/parquet/lowres/thumbnails.parquet"
+
+dataloader:
   batch_size: 4           
   num_workers: 8
-  split: "train"          
 
 trainer:
-  max_epochs: 20
+  max_epochs: 100
   accelerator: gpu
   devices: 1
-  log_every_n_steps: 20  
+  logger: true
+  enable_checkpointing: false
+  enable_model_summary: false
+  num_sanity_val_steps: 0
+
 
 metrics:
   train:
