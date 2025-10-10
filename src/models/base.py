@@ -14,7 +14,7 @@ class MILModule(nn.Module):
 
     def __init__(
         self,
-        feature_extractor: nn.Module,  # [N,C,H,W] -> [N,D]
+        feature_extractor: Optional[nn.Module],  # [N,C,H,W] -> [N,D]
         aggregator: nn.Module,         # ([B,K,D], mask[B,K]) -> [B,D] or (Z, extras)
         predictor: nn.Module,          # [B,D] -> [B,C] or [B,1]
         micro_k: int = 64,
@@ -37,6 +37,9 @@ class MILModule(nn.Module):
         images: torch.Tensor,                # [B,Kmax,C,H,W] (CPU pinned or GPU)
         mask: Optional[torch.Tensor] = None  # [B,Kmax] bool
     ) -> List[torch.Tensor]:
+        
+        assert self.feature_extractor is not None, "No feature extractor defined"
+
         dev = self.device
         B, Kmax = images.shape[:2]
         feats_per_bag: List[torch.Tensor] = []
@@ -51,7 +54,7 @@ class MILModule(nn.Module):
                 f_mb = self.feature_extractor(x_mb)
                 chunks.append(f_mb)
 
-            feats_b = torch.cat(chunks, dim=0).unsqueeze(0)  # [1,Kb,D]
+            feats_b = torch.cat(chunks, dim=0) # [Kb,D]
             feats_per_bag.append(feats_b)
 
         return feats_per_bag
@@ -61,24 +64,27 @@ class MILModule(nn.Module):
     # ---------------------------------------------------------
     def aggregate(
         self,
-        feats_per_bag: List[torch.Tensor],        # [1,Kb,D] per bag
-        mask: Optional[torch.Tensor] = None
+        feats_per_bag: List[torch.Tensor],        # each [Kb, D]
+        mask: Optional[torch.Tensor] = None       # [B, Kmax] optional
     ) -> Dict[str, Any]:
-   
+        """
+        Aggregate a list of variable-length feature tensors into bag-level embeddings.
+        Each entry in feats_per_bag is [Kb, D].
+        """
         B = len(feats_per_bag)
 
         # pad features to [B, Kmax, D]
-        Kmax = max(fb.shape[1] for fb in feats_per_bag)
-        D = feats_per_bag[0].shape[2]
+        Kmax = max(fb.shape[0] for fb in feats_per_bag)
+        D = feats_per_bag[0].shape[1]
         feats_pad = torch.zeros(B, Kmax, D, device=self.device, dtype=feats_per_bag[0].dtype)
         mask_pad = torch.zeros(B, Kmax, device=self.device, dtype=torch.bool)
 
         for b, fb in enumerate(feats_per_bag):
-            Kb = fb.shape[1]
-            feats_pad[b, :Kb] = fb.squeeze(0)
+            Kb = fb.shape[0]
+            feats_pad[b, :Kb] = fb.to(self.device)
             mask_pad[b, :Kb] = True
 
-        # attempt batched forward
+        # batched forward through aggregator
         out = self.aggregator(feats_pad, mask=mask_pad)
 
         if isinstance(out, tuple):
@@ -86,12 +92,11 @@ class MILModule(nn.Module):
         else:
             Z, extras = out, [None] * B
 
-        # ensure extras list type consistency
+        # normalize extras output shape
         if not isinstance(extras, list):
             extras = [extras for _ in range(B)]
 
         return {"Z": Z, "extras": extras}
-
     # ---------------------------------------------------------
     # 3. Prediction (classification or regression)
     # ---------------------------------------------------------

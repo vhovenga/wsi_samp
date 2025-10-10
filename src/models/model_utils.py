@@ -10,10 +10,12 @@ def freeze_module(module):
         
 def build_model(cfg):
     # Feature extractor
-    feat_cls = FEATURE_EXTRACTORS[cfg["feature_extractor"]["name"]]
-    feature_extractor = feat_cls(**cfg["feature_extractor"].get("params", {}))
-    if cfg["feature_extractor"].get("freeze", False):
-        freeze_module(feature_extractor)
+    feature_extractor = cfg.get("feature_extractor", None)
+    if feature_extractor is not None:
+        feat_cls = FEATURE_EXTRACTORS[cfg["feature_extractor"]["name"]]
+        feature_extractor = feat_cls(**cfg["feature_extractor"].get("params", {}))
+        if cfg["feature_extractor"].get("freeze", False):
+            freeze_module(feature_extractor)
 
     # Aggregator
     agg_cls = AGGREGATORS[cfg["aggregator"]["name"]]
