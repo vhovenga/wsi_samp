@@ -122,15 +122,20 @@ class LitMIL(pl.LightningModule):
 
     # --- loss ---
     def loss_step(self, batch: Dict[str, Any], stage: str, mil_out: Dict[str, Any], sampler_aux: Dict[str, Any]):
-        y = batch["labels"].to(self.device, non_blocking=True)
-        task_loss = self.mil_loss_fn(mil_out["logits"], y)
+        logits = mil_out["logits"]
+        targets = batch["labels"]
+        
+        logits = logits.reshape(-1)
+        targets = targets.float().reshape(-1)
+        
+        task_loss = self.mil_loss_fn(mil_out["logits"], targets)
         sampler_loss = None
         if self.sampler_loss_fn is not None and stage == "train" and self.mode != "frozen_feature":
             sampler_loss = self.sampler_loss_fn(sampler_aux, batch, mil_out)
         total_loss = task_loss + (sampler_loss if sampler_loss is not None else 0.0)
 
         self.log(f"{stage}_loss", task_loss, prog_bar=True,
-                 on_step=(stage == "train"), on_epoch=True, batch_size=y.size(0))
+                 on_step=(stage == "train"), on_epoch=True, batch_size=targets.size(0))
         if sampler_loss is not None:
             self.log(f"{stage}_sampler_loss", sampler_loss, on_epoch=True)
         return total_loss
@@ -143,9 +148,12 @@ class LitMIL(pl.LightningModule):
             mil_out, sampler_aux = self.end_to_end_forward(batch, "train")
 
         loss = self.loss_step(batch, "train", mil_out, sampler_aux)
-        preds_raw = mil_out["logits"]
-        y = batch["labels"]
-        self.train_metrics.update(preds_raw, y)
+        logits = mil_out["logits"]
+        targets = batch["labels"]
+        
+        logits = logits.reshape(-1)
+        targets = targets.float().reshape(-1)
+        self.train_metrics.update(logits, targets)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -155,9 +163,13 @@ class LitMIL(pl.LightningModule):
             mil_out, sampler_aux = self.end_to_end_forward(batch, "val")
 
         loss = self.loss_step(batch, "val", mil_out, sampler_aux)
-        preds_raw = mil_out["logits"]
-        y = batch["labels"]
-        self.val_metrics.update(preds_raw, y)
+
+        logits = mil_out["logits"]
+        targets = batch["labels"]
+        
+        logits = logits.reshape(-1)
+        targets = targets.float().reshape(-1)
+        self.val_metrics.update(logits, targets)
         return loss
 
     # --- epoch end hooks ---

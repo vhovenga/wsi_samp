@@ -1,11 +1,7 @@
 seed: 42
 run_name: "resnet_max_pool_frozen_baseline"
-
+mode: "frozen_feature"  
 model:
-  feature_extractor:
-    name: ResNetFeatureExtractor
-    freeze: true  
-    
   aggregator:
     name: MaxPoolAggregator
   predictor:
@@ -14,14 +10,12 @@ model:
 
   micro_batch_size: 64
 
-samplers:
-  train:
-    name: UseAllSampler
-  val:
-    name: UseAllSampler
-  test:
-    name: UseAllSampler
-  
+optimizer:
+  name: Adam
+  params:
+    lr: 1.0e-3
+    weight_decay: 1.0e-4
+    
 loss:
   mil_loss:
     name: BCE

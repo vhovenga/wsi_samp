@@ -18,9 +18,8 @@ class BCELoss(nn.Module):
         super().__init__()
         self.kwargs = kwargs
     def forward(self, logits, targets):
-        logits = logits.squeeze(-1)
-        targets = targets.float().view(-1)
         return F.binary_cross_entropy_with_logits(logits, targets, **self.kwargs)
+
     
 CLASSIFICATION_LOSSES = {
     "CrossEntropy": CrossEntropyLoss,

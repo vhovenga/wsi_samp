@@ -5,7 +5,7 @@ from .base import BaseMetric
 
 
 def _identity(x): return x
-def _to_probs_binary(x): return torch.sigmoid(x.squeeze(-1))
+def _to_probs_binary(x): return torch.sigmoid(x.reshape(-1))
 def _to_probs_multiclass(x): return F.softmax(x, dim=-1)
 
 

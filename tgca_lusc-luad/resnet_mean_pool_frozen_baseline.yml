@@ -1,25 +1,21 @@
 seed: 42
-run_name: "resnet_max_pool_idealized_frozen"
+run_name: "tcga_lusc-luad_frozen_feature"
+
+mode: "frozen_feature"  
+profiler: "pytorch" 
 
 model:
-  feature_extractor:
-    name: ResNetFeatureExtractor
-    freeze: true  
-    
   aggregator:
-    name: MaxPoolAggregator
+    name: MeanPoolAggregator
+    params:
+      in_dim: 1024 
+
   predictor:
     name: LinearPredictor
+    params:
+      in_dim: 1024
 
   micro_batch_size: 64
-
-samplers:
-  train:
-    name: UseAllSampler
-  val:
-    name: UseAllSampler
-  test:
-    name: UseAllSampler
   
 loss:
   mil_loss:
@@ -33,15 +29,15 @@ optimizer:
     lr: 1.0e-3
     weight_decay: 1.0e-4
 
+
 dataset:
-  tiles_parquet: "../data/toy_set_h5/parquet/tiles.parquet"
-  labels_parquet: "../data/toy_set_h5/parquet/labels/slide_labels.parquet"
-  splits_parquet: "../data/toy_set_h5/parquet/splits/fold1.parquet"
-  features_parquet: "../data/toy_set_h5/parquet/features.parquet"
-  lowres_parquet: "../data/toy_set_h5/parquet/lowres/thumbnails.parquet"
+  tiles_parquet: "../data/tcga_luad_lusc/parquet/tiles.parquet"
+  labels_parquet: "../data/tcga_luad_lusc/parquet/slide_labels.parquet"
+  splits_parquet: "../data/tcga_luad_lusc/parquet/split_patient_strat_70_15_15.parquet"
+  features_parquet: "../data/tcga_luad_lusc/parquet/features.parquet"
 
 dataloader:
-  batch_size: 4           
+  batch_size: 8
   num_workers: 8
 
 trainer:

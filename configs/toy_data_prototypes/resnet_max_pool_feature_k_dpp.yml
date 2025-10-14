@@ -33,6 +33,12 @@ loss:
     params:
       reduction: mean
 
+optimizer:
+  name: Adam
+  params:
+    lr: 1.0e-3
+    weight_decay: 1.0e-4
+
 dataset:
   tiles_parquet: "../data/toy_set_h5/parquet/tiles.parquet"
   labels_parquet: "../data/toy_set_h5/parquet/labels/slide_labels.parquet"

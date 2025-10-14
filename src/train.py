@@ -2,35 +2,29 @@
 import yaml
 import torch
 import argparse
-from torch.utils.data import DataLoader, Subset, random_split
+from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
+from torch.profiler import schedule, tensorboard_trace_handler
 from torchvision import transforms
 
-from data.data_utils import bag_collate_padded
 from models.lit_module import LitMIL
 from data.datasets import SlideDataset, slide_collate
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train MIL model from config.")
-    parser.add_argument(
-        "config",
-        type=str,
-        help="Path to config file.",
-    )
-
+    parser.add_argument("config", type=str, help="Path to config file.")
     with open(parser.parse_args().config) as f:
         cfg = yaml.safe_load(f)
 
-
     # Example transforms
     lowres_tfm = transforms.Compose([
-        transforms.Resize((256, 256)),  # thumbnails to fixed size
+        transforms.Resize((256, 256)),
         transforms.ToTensor(),
     ])
-    patch_tfm = transforms.ToTensor()  # applied when fetching full patches
 
-    # Build a reference dataset just to get the slide count for splitting
+    patch_tfm = transforms.ToTensor()
+
     train_ds = SlideDataset(
         **cfg["dataset"],
         split="train",
@@ -44,9 +38,7 @@ if __name__ == "__main__":
         lowres_transform=lowres_tfm,
         patch_transform=patch_tfm,
     )
-
-
-    # Loaders: fixed-K train can use default; use padded collate for variable-K val
+    
     train_loader = DataLoader(
         train_ds,
         **cfg["dataloader"],
@@ -65,8 +57,8 @@ if __name__ == "__main__":
 
     lit_model = LitMIL(cfg)
 
-    trainer_cfg = dict(cfg["trainer"]) 
-    use_logger = trainer_cfg.pop("logger", True)  
+    trainer_cfg = dict(cfg["trainer"])
+    use_logger = trainer_cfg.pop("logger", True)
     if use_logger:
         logger = TensorBoardLogger(
             "../experiments",
@@ -75,8 +67,11 @@ if __name__ == "__main__":
     else:
         logger = False
 
+    profiler = cfg.get("profiler", None)
+
     trainer = pl.Trainer(
         logger=logger,
+        profiler=profiler,
         **trainer_cfg
     )
 
