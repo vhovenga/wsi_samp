@@ -7,78 +7,126 @@ from PIL import Image
 from torchvision.transforms import functional as TF
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 
 # ---------- Lightweight on-demand tile/feature view ----------
 class SlideFeatureView:
-    """Loads image tiles and HDF5-stored features on demand using absolute paths."""
+    """Loads image tiles and features (HDF5 or .pt) on demand using absolute paths.
+    If included_idxs is provided, this view behaves as if only those patches exist.
+    """
 
     def __init__(
         self,
         patch_uris: List[str],
-        h5_path: Optional[str] = None,
+        feature_path: Optional[str] = None,
         image_mode: str = "RGB",
         patch_transform: Optional[Any] = None,
+        included_idxs: Optional[np.ndarray] = None,
     ):
-        self.patch_uris = patch_uris
-        self.h5_path = h5_path
+        # core data
+        self._all_patch_uris = patch_uris
+        self.feature_path = feature_path
         self.image_mode = image_mode
         self.patch_transform = patch_transform
+
+        # --- handle inclusion subset ---
+
+        if included_idxs is not None:
+            self.included_idxs = np.asarray(included_idxs)  # absolute indices in feature store
+            self.patch_uris = patch_uris                    # already the subset; do NOT reindex
+        else:
+            self.included_idxs = None
+            self.patch_uris = patch_uris
+
+        # --- feature file type ---
+        if feature_path:
+            if feature_path.endswith(".h5"):
+                self.feature_type = "h5"
+            elif feature_path.endswith(".pt"):
+                self.feature_type = "pt"
+            else:
+                raise ValueError(f"Unsupported feature file: {feature_path}")
+
+    # -----------------------------
+    # internal helpers
+    # -----------------------------
+    def __len__(self) -> int:
+        return len(self.patch_uris)
+
+    def _map_idxs(self, idxs: Optional[Sequence[int]]) -> np.ndarray:
+        """Map relative indices (subset) → absolute indices (in feature file)."""
+        if idxs is None:
+            return self.included_idxs if self.included_idxs is not None else np.arange(len(self._all_patch_uris))
+        idxs = np.asarray(idxs)
+        if self.included_idxs is not None:
+            return self.included_idxs[idxs]
+        return idxs
 
     # -----------------------------
     # Fetch image tiles
     # -----------------------------
-    def fetch_tiles(self, idxs: Optional[List[int]] = None) -> torch.Tensor:
-        """Load image tiles by index (or all if None)."""
-        if idxs is None:
-            idxs = list(range(len(self.patch_uris)))
-
+    def fetch_tiles(self, idxs: Optional[Sequence[int]] = None) -> torch.Tensor:
         imgs = []
-        for i in idxs:
+        sel = idxs if idxs is not None else range(len(self.patch_uris))
+        for i in sel:
             with Image.open(self.patch_uris[i]) as im:
                 im = im.convert(self.image_mode)
                 t = self.patch_transform(im) if self.patch_transform else TF.to_tensor(im)
                 imgs.append(t)
-
         if not imgs:
             return torch.empty((0, 3, 1, 1))
         return torch.stack(imgs, 0)
 
     # -----------------------------
-    # Fetch features from h5
+    # Unified feature loader
     # -----------------------------
-    def fetch_features(self, idxs: Optional[List[int]] = None) -> torch.Tensor:
-        """Load precomputed features from a per-slide HDF5 file."""
-        if self.h5_path is None:
-            raise ValueError("No feature HDF5 file provided.")
+    def fetch_features(self, idxs: Optional[Sequence[int]] = None) -> torch.Tensor:
+        if self.feature_path is None:
+            raise ValueError("No feature file provided.")
+        abs_idxs = self._map_idxs(idxs)
 
-        with h5py.File(self.h5_path, "r") as f:
-            feats = f["features"]
-            data = feats[()] if idxs is None else feats[idxs]
-        return torch.from_numpy(data).float()
+        if self.feature_type == "h5":
+            with h5py.File(self.feature_path, "r") as f:
+                feats = f["features"][abs_idxs]
+            return torch.from_numpy(feats).float()
 
-    def fetch_coords(self, idxs: Optional[List[int]] = None) -> np.ndarray:
-        """Load patch coordinates (x,y) from HDF5."""
-        if self.h5_path is None:
-            raise ValueError("No feature HDF5 file provided.")
-        with h5py.File(self.h5_path, "r") as f:
-            coords = f["coords"]
-            data = coords[()] if idxs is None else coords[idxs]
-        return data
+        elif self.feature_type == "pt":
+            data = torch.load(self.feature_path, map_location="cpu")
+            feats = data["features"] if isinstance(data, dict) and "features" in data else data
+            return feats[abs_idxs].float()
 
-    def fetch_patch_indices(self, idxs: Optional[List[int]] = None) -> np.ndarray:
-        """Load patch_grid_idx values from HDF5."""
-        if self.h5_path is None:
-            raise ValueError("No feature HDF5 file provided.")
-        with h5py.File(self.h5_path, "r") as f:
-            pg = f["patch_grid_idx"]
-            data = pg[()] if idxs is None else pg[idxs]
-        return data
+    def fetch_coords(self, idxs: Optional[Sequence[int]] = None) -> np.ndarray:
+        if self.feature_path is None:
+            raise ValueError("No feature file provided.")
+        abs_idxs = self._map_idxs(idxs)
+
+        if self.feature_type == "h5":
+            with h5py.File(self.feature_path, "r") as f:
+                return f["coords"][abs_idxs]
+
+        elif self.feature_type == "pt":
+            data = torch.load(self.feature_path, map_location="cpu")
+            coords = data["coords"].numpy() if torch.is_tensor(data["coords"]) else np.asarray(data["coords"])
+            return coords[abs_idxs]
+
+    def fetch_patch_indices(self, idxs: Optional[Sequence[int]] = None) -> np.ndarray:
+        if self.feature_path is None:
+            raise ValueError("No feature file provided.")
+        abs_idxs = self._map_idxs(idxs)
+
+        if self.feature_type == "h5":
+            with h5py.File(self.feature_path, "r") as f:
+                return f["patch_grid_idx"][abs_idxs]
+
+        elif self.feature_type == "pt":
+            data = torch.load(self.feature_path, map_location="cpu")
+            arr = data["patch_grid_idx"].numpy() if torch.is_tensor(data["patch_grid_idx"]) else np.asarray(data["patch_grid_idx"])
+            return arr[abs_idxs]
 
     @property
     def has_features(self) -> bool:
-        return self.h5_path is not None
+        return self.feature_path is not None
 
 
 # ---------- Slide-level record ----------
@@ -89,7 +137,8 @@ class SlideRecord:
     coords: np.ndarray
     patch_uris: List[str]
     lowres_uri: Optional[str]
-    feature_h5_uri: Optional[str] = None
+    feature_uri: Optional[str] = None
+    included_idxs: Optional[np.ndarray] = None
 
 
 # ---------- Dataset ----------
@@ -151,10 +200,15 @@ class SlideDataset(Dataset):
             self.label_mapping = None
 
         # --- filter tiles ---
-        need = {"slide_id", "patch_grid_idx", "x", "y", "patch_uri"}
+        need = {"slide_id", "patch_grid_idx", "x", "y", "patch_uri", "include"}
         if not need.issubset(tiles_df.columns):
             raise RuntimeError(f"tiles.parquet must have {need}, got {tiles_df.columns.tolist()}")
-        tiles_df = tiles_df[tiles_df["slide_id"].isin(split_slide_ids)]
+
+        # keep only current split and included patches
+        tiles_df = tiles_df[
+            (tiles_df["slide_id"].isin(split_slide_ids)) &
+            (tiles_df["include"].astype(bool))
+        ].copy()
 
         # --- feature map ---
         feat_map = {r.slide_id: r.feature_uri for r in feats_df.itertuples(index=False)}
@@ -169,14 +223,18 @@ class SlideDataset(Dataset):
 
         # --- build records ---
         self.records: List[SlideRecord] = []
+        self.records: List[SlideRecord] = []
         for sid, g in tiles_df.groupby("slide_id", sort=True):
             if sid not in labels:
                 continue
+
             g = g.sort_values("patch_grid_idx").reset_index(drop=True)
             coords = g[["x", "y"]].to_numpy(np.int64)
             patch_uris = g["patch_uri"].tolist()
-            feature_h5 = feat_map.get(sid, None)
+            feature_uri = feat_map.get(sid, None)
             lowres_uri = lowres_map.get(sid, None)
+            included_idxs = g["patch_grid_idx"].to_numpy(np.int64)
+
             self.records.append(
                 SlideRecord(
                     slide_id=sid,
@@ -184,7 +242,8 @@ class SlideDataset(Dataset):
                     coords=coords,
                     patch_uris=patch_uris,
                     lowres_uri=lowres_uri,
-                    feature_h5_uri=feature_h5,
+                    feature_uri=feature_uri,
+                    included_idxs=included_idxs,
                 )
             )
 
@@ -214,9 +273,10 @@ class SlideDataset(Dataset):
         dtype = torch.float if self.task_type == "regression" else torch.long
         view = SlideFeatureView(
             patch_uris=rec.patch_uris,
-            h5_path=rec.feature_h5_uri,
+            feature_path=rec.feature_uri,
             image_mode=self.image_mode,
             patch_transform=self.patch_transform,
+            included_idxs=rec.included_idxs,  
         )
         return {
             "slide_id": rec.slide_id,

@@ -4,6 +4,7 @@ import torch
 import argparse
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.profiler import schedule, tensorboard_trace_handler
 from torchvision import transforms
@@ -59,19 +60,27 @@ if __name__ == "__main__":
 
     trainer_cfg = dict(cfg["trainer"])
     use_logger = trainer_cfg.pop("logger", True)
+    
+    run_name = cfg.get("run_name", "mil_run")
+
     if use_logger:
         logger = TensorBoardLogger(
             "../experiments",
-            name=cfg.get("run_name", "mil_run"),
+            name=run_name,
         )
     else:
         logger = False
 
-    profiler = cfg.get("profiler", None)
+    checkpoint = cfg.get("checkpoint", None)
+    if checkpoint is not None:
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=f"../experiments/{run_name}/checkpoints/",
+            **checkpoint.get("params", {})    
+        )
 
     trainer = pl.Trainer(
         logger=logger,
-        profiler=profiler,
+        callbacks=[checkpoint_callback],
         **trainer_cfg
     )
 

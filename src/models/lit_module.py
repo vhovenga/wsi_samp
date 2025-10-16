@@ -135,7 +135,8 @@ class LitMIL(pl.LightningModule):
         total_loss = task_loss + (sampler_loss if sampler_loss is not None else 0.0)
 
         self.log(f"{stage}_loss", task_loss, prog_bar=True,
-                 on_step=(stage == "train"), on_epoch=True, batch_size=targets.size(0))
+                 on_step=(stage == "train"), on_epoch=True, batch_size=targets.size(0),
+                 sync_dist=True)
         if sampler_loss is not None:
             self.log(f"{stage}_sampler_loss", sampler_loss, on_epoch=True)
         return total_loss

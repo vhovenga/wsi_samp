@@ -21,7 +21,7 @@ class LinearPredictor(nn.Module):
         num_classes: int = 1,
         hidden_dim: int | None = 512,
         dropout: float = 0.1,
-        use_bn: bool = True,
+        use_bn: bool = False,
     ):
         super().__init__()
         out_dim = num_classes if num_classes >= 2 else 1
