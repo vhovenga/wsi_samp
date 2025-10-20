@@ -18,13 +18,16 @@ if __name__ == "__main__":
     with open(parser.parse_args().config) as f:
         cfg = yaml.safe_load(f)
 
-    # Example transforms
+    # Resnet transforms
     lowres_tfm = transforms.Compose([
-        transforms.Resize((256, 256)),
         transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    patch_tfm = transforms.ToTensor()
+    patch_tfm = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
 
     train_ds = SlideDataset(
         **cfg["dataset"],
@@ -45,7 +48,8 @@ if __name__ == "__main__":
         **cfg["dataloader"],
         shuffle=True,
         pin_memory=True,
-        collate_fn=slide_collate
+        collate_fn=slide_collate,
+        drop_last=True
     )
 
     val_loader = DataLoader(
@@ -58,6 +62,20 @@ if __name__ == "__main__":
 
     lit_model = LitMIL(cfg)
 
+    checkpoint_pth = cfg.get("checkpoint", None)
+    if checkpoint_pth is not None:
+        checkpoint = torch.load(checkpoint_pth)["state_dict"]
+        missing, unexpected = lit_model.load_state_dict(checkpoint, strict=False)
+
+        if missing or unexpected:
+            print("⚠️ Warning: checkpoint mismatch detected.")
+            if missing:
+                print("Missing keys:", missing)
+            if unexpected:
+                print("Unexpected keys:", unexpected)
+        else:
+            print(f"✅ Successfully loaded weights from checkpoint: {checkpoint_pth}")
+            
     trainer_cfg = dict(cfg["trainer"])
     use_logger = trainer_cfg.pop("logger", True)
     
@@ -71,11 +89,11 @@ if __name__ == "__main__":
     else:
         logger = False
 
-    checkpoint = cfg.get("checkpoint", None)
-    if checkpoint is not None:
+    checkpointer = cfg.get("checkpointer", None)
+    if checkpointer is not None:
         checkpoint_callback = ModelCheckpoint(
             dirpath=f"../experiments/{run_name}/checkpoints/",
-            **checkpoint.get("params", {})    
+            **checkpointer.get("params", {})    
         )
 
     trainer = pl.Trainer(

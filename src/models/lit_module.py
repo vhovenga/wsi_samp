@@ -78,6 +78,11 @@ class LitMIL(pl.LightningModule):
             build_bag_modifier(bag_modifier_cfg) if bag_modifier_cfg is not None else None
         )
 
+    def on_fit_start(self):
+        self.train_metrics = self.train_metrics.to(self.device)
+        self.val_metrics = self.val_metrics.to(self.device)
+        self.test_metrics = self.test_metrics.to(self.device)
+
     # --- sampler + mil forward ---
     def end_to_end_forward(self, batch: Dict[str, Any], stage: str):
         images_pad, mask_pad, sampler_aux = self.sampler_step(batch, stage)
@@ -154,7 +159,8 @@ class LitMIL(pl.LightningModule):
         
         logits = logits.reshape(-1)
         targets = targets.float().reshape(-1)
-        self.train_metrics.update(logits, targets)
+        preds = torch.sigmoid(logits.float()).reshape(-1)
+        self.train_metrics.update(preds, targets)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -170,13 +176,19 @@ class LitMIL(pl.LightningModule):
         
         logits = logits.reshape(-1)
         targets = targets.float().reshape(-1)
-        self.val_metrics.update(logits, targets)
+        preds = torch.sigmoid(logits.float()).reshape(-1)
+        self.val_metrics.update(preds, targets)
         return loss
 
     # --- epoch end hooks ---
     def on_train_epoch_end(self):
-        self.log_dict(self.train_metrics.compute(), on_step=False, on_epoch=True, prog_bar=False, sync_dist=True)
+        print("Starting training_epoch_end")
+
+        metrics = self.train_metrics.compute()
+        self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=False, sync_dist=True)
+        print("Finished logging train metrics")
         self.train_metrics.reset()
+        print("✅ finished training_epoch_end")
 
     def on_validation_epoch_end(self):
         self.log_dict(self.val_metrics.compute(), on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)

@@ -3,51 +3,46 @@ import torch.nn as nn
 import torchvision.models as tvm
 
 class ResNetFeatureExtractor(nn.Module):
-    """
-    Minimal ResNet feature extractor with automatic pretrained weights.
-
-    - Supports resnet18/34/50/101/152.
-    - Automatically loads torchvision pretrained weights.
-    - Returns global-average-pooled features (fc replaced by Identity).
-    - Output dim: 512 for 18/34, 2048 for 50/101/152.
-
-    Input:
-        (B, K, 3, H, W) -> (B, K, D)
-        (N, 3, H, W)    -> (N, D)
-    """
     def __init__(
         self,
         model_name: str = "resnet50",
         pretrained: bool = True,
+        weights_url: str | None = None,
         train_backbone: bool = True,
         return_sequence: bool = False,
     ):
         super().__init__()
         model_name = model_name.lower()
-        assert model_name in {"resnet18", "resnet34", "resnet50", "resnet101", "resnet152"}, \
-            f"Unsupported model: {model_name}"
+        assert model_name in {"resnet18", "resnet34", "resnet50", "resnet101", "resnet152"}
 
-        # --- Auto-load appropriate weights ---
+        # --- Auto-load appropriate weights or URL ---
         if pretrained:
-            weights_enum = {
-                "resnet18": tvm.ResNet18_Weights.DEFAULT,
-                "resnet34": tvm.ResNet34_Weights.DEFAULT,
-                "resnet50": tvm.ResNet50_Weights.DEFAULT,
-                "resnet101": tvm.ResNet101_Weights.DEFAULT,
-                "resnet152": tvm.ResNet152_Weights.DEFAULT,
-            }[model_name]
+            if weights_url is not None:
+                # Download + load weights from a custom URL
+                state_dict = torch.hub.load_state_dict_from_url(weights_url, progress=True)
+                weights_enum = None
+            else:
+                weights_enum = {
+                    "resnet18": tvm.ResNet18_Weights.DEFAULT,
+                    "resnet34": tvm.ResNet34_Weights.DEFAULT,
+                    "resnet50": tvm.ResNet50_Weights.DEFAULT,
+                    "resnet101": tvm.ResNet101_Weights.DEFAULT,
+                    "resnet152": tvm.ResNet152_Weights.DEFAULT,
+                }[model_name]
+                state_dict = None
         else:
             weights_enum = None
+            state_dict = None
 
         # --- Construct backbone ---
         ctor = getattr(tvm, model_name)
         self.backbone = ctor(weights=weights_enum)
-        self.backbone.fc = nn.Identity()
+        if state_dict is not None:
+            self.backbone.load_state_dict(state_dict)
 
-        # --- Output dim ---
+        self.backbone.fc = nn.Identity()
         self.out_dim = 512 if model_name in ("resnet18", "resnet34") else 2048
 
-        # --- Optionally freeze ---
         if not train_backbone:
             for p in self.backbone.parameters():
                 p.requires_grad = False
