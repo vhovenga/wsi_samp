@@ -43,13 +43,14 @@ if __name__ == "__main__":
         patch_transform=patch_tfm,
     )
     
+
     train_loader = DataLoader(
         train_ds,
         **cfg["dataloader"],
         shuffle=True,
         pin_memory=True,
         collate_fn=slide_collate,
-        drop_last=True
+        drop_last=False
     )
 
     val_loader = DataLoader(
@@ -98,8 +99,8 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         logger=logger,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback] if checkpointer is not None else [],
         **trainer_cfg
     )
-
+    
     trainer.fit(lit_model, train_loader, val_loader)

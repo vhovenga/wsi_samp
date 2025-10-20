@@ -13,7 +13,7 @@ class AccuracyMetric(BaseMetric):
     def __init__(self, **kwargs):
         super().__init__(name="Accuracy")
         task = kwargs.get("task", "binary")
-        self.metric = Accuracy(**kwargs)
+        self.metric = Accuracy(**kwargs, sync_on_compute=False)
 
         if task == "binary":
             self._transform = _to_probs_binary

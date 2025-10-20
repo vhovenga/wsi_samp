@@ -159,8 +159,7 @@ class LitMIL(pl.LightningModule):
         
         logits = logits.reshape(-1)
         targets = targets.float().reshape(-1)
-        preds = torch.sigmoid(logits.float()).reshape(-1)
-        self.train_metrics.update(preds, targets)
+        self.train_metrics.update(logits, targets)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -176,19 +175,14 @@ class LitMIL(pl.LightningModule):
         
         logits = logits.reshape(-1)
         targets = targets.float().reshape(-1)
-        preds = torch.sigmoid(logits.float()).reshape(-1)
-        self.val_metrics.update(preds, targets)
+        self.val_metrics.update(logits, targets)
         return loss
 
     # --- epoch end hooks ---
     def on_train_epoch_end(self):
-        print("Starting training_epoch_end")
-
         metrics = self.train_metrics.compute()
         self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=False, sync_dist=True)
-        print("Finished logging train metrics")
         self.train_metrics.reset()
-        print("✅ finished training_epoch_end")
 
     def on_validation_epoch_end(self):
         self.log_dict(self.val_metrics.compute(), on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
