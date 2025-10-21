@@ -19,28 +19,47 @@ if __name__ == "__main__":
         cfg = yaml.safe_load(f)
 
     # Resnet transforms
-    lowres_tfm = transforms.Compose([
+    lowres_tfm_train = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
-
-    patch_tfm = transforms.Compose([
+    patch_tfm_train = transforms.Compose([
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomVerticalFlip(p=0.5),
+        transforms.RandomRotation(degrees=90),
+        transforms.ColorJitter(
+            brightness=0.2,
+            contrast=0.2,
+            saturation=0.2,
+            hue=0.1
+        ),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225]),
+        transforms.RandomApply([
+            transforms.ElasticTransform(alpha=50.0, sigma=5.0)
+        ], p=0.5)
     ])
-
     train_ds = SlideDataset(
         **cfg["dataset"],
         split="train",
-        lowres_transform=lowres_tfm,
-        patch_transform=patch_tfm,
+        lowres_transform=lowres_tfm_train,
+        patch_transform=patch_tfm_train,
     )
 
+    lowres_tfm_val = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    patch_tfm_val = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
     val_ds = SlideDataset(
         **cfg["dataset"],
         split="val",
-        lowres_transform=lowres_tfm,
-        patch_transform=patch_tfm,
+        lowres_transform=lowres_tfm_val,
+        patch_transform=patch_tfm_val,
     )
     
 

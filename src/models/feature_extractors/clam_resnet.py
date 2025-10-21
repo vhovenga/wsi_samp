@@ -41,6 +41,7 @@ class CLAMResNet50(nn.Module):
 
         # --- Optional freezing ---
         if fine_tune_stage:
+            print("Freezing backbone.")
             self._freeze_clam_style()
 
     def _make_layer(self, planes, blocks, stride=1):

@@ -59,6 +59,34 @@ class MILModule(nn.Module):
 
         return feats_per_bag
 
+    # def feature_extract(
+    #     self,
+    #     images: torch.Tensor,                # [B, Kmax, C, H, W]
+    #     mask: Optional[torch.Tensor] = None  # [B, Kmax] bool
+    # ) -> List[torch.Tensor]:
+    #     assert self.feature_extractor is not None, "No feature extractor defined"
+
+    #     dev = self.device
+    #     B, Kmax = images.shape[:2]
+
+    #     if mask is not None:
+    #         # ensure same device for indexing
+    #         mask = mask.to(images.device)
+    #         flat_imgs = images[mask]  # [N_valid, C, H, W]
+    #         bag_indices = torch.arange(B, device=images.device).repeat_interleave(Kmax)[mask.view(-1)]
+    #     else:
+    #         flat_imgs = images.view(B * Kmax, *images.shape[2:])
+    #         bag_indices = torch.arange(B, device=images.device).repeat_interleave(Kmax)
+
+    #     flat_imgs = flat_imgs.to(dev, non_blocking=True)
+    #     flat_feats = self.feature_extractor(flat_imgs)
+
+    #     feats_per_bag = []
+    #     for b in range(B):
+    #         feats_b = flat_feats[bag_indices == b]
+    #         feats_per_bag.append(feats_b)
+
+    #     return feats_per_bag
     # ---------------------------------------------------------
     # 2. Aggregation
     # ---------------------------------------------------------
