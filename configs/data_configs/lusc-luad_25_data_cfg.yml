@@ -1,0 +1,4 @@
+tiles_parquet: "../data/tcga_luad_lusc/parquet/tiles.parquet"
+labels_parquet: "../data/tcga_luad_lusc/parquet/slide_labels.parquet"
+splits_parquet: "../data/tcga_luad_lusc/parquet/split_1_25train.parquet"
+features_parquet:  "/media/ssd1/van/lusc-luad_feats/amp_uniform_25_hybrid_final/features.parquet" 

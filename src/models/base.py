@@ -112,6 +112,7 @@ class MILModule(nn.Module):
             feats_pad[b, :Kb] = fb.to(self.device)
             mask_pad[b, :Kb] = True
 
+
         # batched forward through aggregator
         out = self.aggregator(feats_pad, mask=mask_pad)
 

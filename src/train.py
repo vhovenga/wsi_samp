@@ -13,78 +13,86 @@ from models.lit_module import LitMIL
 from data.datasets import SlideDataset, slide_collate
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train MIL model from config.")
-    parser.add_argument("config", type=str, help="Path to config file.")
-    with open(parser.parse_args().config) as f:
-        cfg = yaml.safe_load(f)
+    parser = argparse.ArgumentParser(description="Train MIL model with separate configs.")
+    parser.add_argument("module_config", type=str, help="Path to model/training config.")
+    parser.add_argument("data_config", type=str, help="Path to dataset config.")
+    parser.add_argument("trainer_config", type=str, help="Path to trainer config.")
+    args = parser.parse_args()
 
-    # Resnet transforms
+    # -----------------------------
+    # Load configs
+    # -----------------------------
+    with open(args.module_config) as f:
+        module_cfg = yaml.safe_load(f)
+    with open(args.data_config) as f:
+        data_cfg = yaml.safe_load(f)
+    with open(args.trainer_config) as f:
+        trainer_cfg = yaml.safe_load(f)
+
+    # -----------------------------
+    # Transforms
+    # -----------------------------
+    tfm_norm = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                    std=[0.229, 0.224, 0.225])
+
     lowres_tfm_train = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        tfm_norm
     ])
     patch_tfm_train = transforms.Compose([
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomVerticalFlip(p=0.5),
-        transforms.RandomRotation(degrees=90),
-        transforms.ColorJitter(
-            brightness=0.2,
-            contrast=0.2,
-            saturation=0.2,
-            hue=0.1
-        ),
+        transforms.RandomHorizontalFlip(0.5),
+        transforms.RandomVerticalFlip(0.5),
+        transforms.RandomRotation(90),
+        transforms.ColorJitter(0.2, 0.2, 0.2, 0.1),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225]),
-        transforms.RandomApply([
-            transforms.ElasticTransform(alpha=50.0, sigma=5.0)
-        ], p=0.5)
+        tfm_norm,
+        transforms.RandomApply([transforms.ElasticTransform(alpha=50.0, sigma=5.0)], p=0.5)
     ])
+
+    lowres_tfm_val = transforms.Compose([transforms.ToTensor(), tfm_norm])
+    patch_tfm_val = transforms.Compose([transforms.ToTensor(), tfm_norm])
+
+    # -----------------------------
+    # Datasets / Dataloaders
+    # -----------------------------
     train_ds = SlideDataset(
-        **cfg["dataset"],
+        **data_cfg,
         split="train",
         lowres_transform=lowres_tfm_train,
         patch_transform=patch_tfm_train,
     )
-
-    lowres_tfm_val = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    patch_tfm_val = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
     val_ds = SlideDataset(
-        **cfg["dataset"],
+        **data_cfg,
         split="val",
         lowres_transform=lowres_tfm_val,
         patch_transform=patch_tfm_val,
     )
-    
 
+    dataloader_cfg = module_cfg.get("dataloader", {})
     train_loader = DataLoader(
         train_ds,
-        **cfg["dataloader"],
+        **dataloader_cfg,
         shuffle=True,
         pin_memory=True,
         collate_fn=slide_collate,
-        drop_last=False
+        drop_last=False,
     )
-
     val_loader = DataLoader(
         val_ds,
-        **cfg["dataloader"],
+        **dataloader_cfg,
         shuffle=False,
         pin_memory=True,
-        collate_fn=slide_collate
+        collate_fn=slide_collate,
     )
 
-    lit_model = LitMIL(cfg)
+    # -----------------------------
+    # Lightning Module
+    # -----------------------------
+    lit_model = LitMIL(module_cfg)
 
-    checkpoint_pth = cfg.get("checkpoint", None)
-    if checkpoint_pth is not None:
-        checkpoint = torch.load(checkpoint_pth)["state_dict"]
+    ckpt_path = module_cfg.get("checkpoint", None)
+    if ckpt_path is not None:
+        checkpoint = torch.load(ckpt_path)["state_dict"]
         missing, unexpected = lit_model.load_state_dict(checkpoint, strict=False)
 
         if missing or unexpected:
@@ -94,32 +102,35 @@ if __name__ == "__main__":
             if unexpected:
                 print("Unexpected keys:", unexpected)
         else:
-            print(f"✅ Successfully loaded weights from checkpoint: {checkpoint_pth}")
-            
-    trainer_cfg = dict(cfg["trainer"])
+            print(f"✅ Successfully loaded weights from checkpoint: {ckpt_path}")
+
+    # -----------------------------
+    # Trainer / Logger / Checkpoints
+    # -----------------------------
     use_logger = trainer_cfg.pop("logger", True)
-    
-    run_name = cfg.get("run_name", "mil_run")
+    run_name = module_cfg.get("run_name", "mil_run")
 
-    if use_logger:
-        logger = TensorBoardLogger(
-            "../experiments",
-            name=run_name,
-        )
-    else:
-        logger = False
+    logger = TensorBoardLogger("../experiments", name=run_name) if use_logger else False
 
-    checkpointer = cfg.get("checkpointer", None)
-    if checkpointer is not None:
-        checkpoint_callback = ModelCheckpoint(
+    checkpointer = module_cfg.get("checkpointer", None)
+    checkpoint_cb = (
+        ModelCheckpoint(
             dirpath=f"../experiments/{run_name}/checkpoints/",
-            **checkpointer.get("params", {})    
+            **checkpointer.get("params", {}),
         )
+        if checkpointer is not None
+        else None
+    )
+
+    callbacks = [checkpoint_cb] if checkpoint_cb else []
 
     trainer = pl.Trainer(
         logger=logger,
-        callbacks=[checkpoint_callback] if checkpointer is not None else [],
-        **trainer_cfg
+        callbacks=callbacks,
+        **trainer_cfg,
     )
-    
+
+    # -----------------------------
+    # Train
+    # -----------------------------
     trainer.fit(lit_model, train_loader, val_loader)

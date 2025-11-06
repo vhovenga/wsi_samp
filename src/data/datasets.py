@@ -7,7 +7,7 @@ from PIL import Image
 from torchvision.transforms import functional as TF
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Union, Any, Dict, List, Optional, Sequence
 
 
 # ---------- Lightweight on-demand tile/feature view ----------
@@ -84,7 +84,9 @@ class SlideFeatureView:
     def fetch_features(self, idxs: Optional[Sequence[int]] = None) -> torch.Tensor:
         if self.feature_path is None:
             raise ValueError("No feature file provided.")
-        abs_idxs = self._map_idxs(idxs)
+    
+        # abs_idxs = self._map_idxs(idxs)
+        abs_idxs = idxs
 
         if self.feature_type == "h5":
             with h5py.File(self.feature_path, "r") as f:
@@ -94,7 +96,11 @@ class SlideFeatureView:
         elif self.feature_type == "pt":
             data = torch.load(self.feature_path, map_location="cpu")
             feats = data["features"] if isinstance(data, dict) and "features" in data else data
-            return feats[abs_idxs].float()
+            
+            if abs_idxs is None:
+                return feats.float()
+            else:
+                return feats[abs_idxs].float()
 
     def fetch_coords(self, idxs: Optional[Sequence[int]] = None) -> np.ndarray:
         if self.feature_path is None:
@@ -147,7 +153,7 @@ class SlideDataset(Dataset):
 
     def __init__(
         self,
-        split: str,
+        split: Union[str, Sequence[str]],
         tiles_parquet: str = "tiles.parquet",
         labels_parquet: str = "labels/slide_labels.parquet",
         splits_parquet: str = "splits/fold1.parquet",
@@ -178,9 +184,14 @@ class SlideDataset(Dataset):
         feats_df = pd.read_parquet(features_parquet)
 
         # --- get split slide IDs ---
-        split_slide_ids = set(splits_df.loc[splits_df["split"] == split, "slide_id"])
-        if not split_slide_ids:
-            raise RuntimeError(f"No slides for split='{split}' found in {splits_parquet}.")
+        if isinstance(split, str):
+            split_values = [split]
+        elif isinstance(split, (list, tuple, set)):
+            split_values = list(split)
+        else:
+            raise TypeError(f"split must be str or list/tuple/set, got {type(split)}")
+
+        split_slide_ids = set(splits_df.loc[splits_df["split"].isin(split_values), "slide_id"])
 
         # --- handle labels ---
         labels_df = labels_df[labels_df["slide_id"].isin(split_slide_ids)]

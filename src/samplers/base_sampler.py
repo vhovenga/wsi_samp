@@ -91,7 +91,7 @@ class NonLearnableSampler(BaseSampler):
 
         scores, aux_fwd = self.forward(batch, **self.forward_kwargs)
         idx_list, aux_sel = self.sample(scores, coord_mask, **self.sample_kwargs)
-        aux = {**aux_fwd, **aux_sel}
+        aux = {**aux_fwd, **aux_sel, "idx_list": idx_list}
 
         # we don’t care about grads → all ops excluded from autograd
         return self._fetch_tiles(views, idx_list, coord_mask.device, aux)
@@ -108,7 +108,7 @@ class LearnableSampler(BaseSampler):
         # forward tracked by autograd → grads will flow into sampler params
         scores, aux_fwd = self.forward(batch, **self.forward_kwargs)
         idx_list, aux_sel = self.sample(scores, coord_mask, **self.sample_kwargs)
-        aux = {**aux_fwd, **aux_sel}
+        aux = {**aux_fwd, **aux_sel, "idx_list": idx_list}
 
         # explicitly clear big inputs (free memory after forward graph captured)
         torch.cuda.empty_cache()   # optional, forces cache release

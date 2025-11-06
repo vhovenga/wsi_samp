@@ -1,5 +1,6 @@
 seed: 42
-run_name: "lusc-luad_attn_mean_pool_uniform_25"
+run_name: "lusc-resnet_attn_mean_pool_uniform_25_hybrid"
+mode: "end_to_end_hybrid"
 
 checkpoint: /home/dog/Documents/van/wsi_samp/experiments/lusc-luad_attn_mean_pool_frozen_baseline_25/checkpoints/epoch=99-step=300.ckpt
 

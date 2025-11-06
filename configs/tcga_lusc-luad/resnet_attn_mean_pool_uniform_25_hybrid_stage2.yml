@@ -1,0 +1,51 @@
+seed: 42
+run_name: "resnet_attn_mean_pool_uniform_25_hybrid_stage2"
+mode: "frozen_feature"
+
+checkpoint: /home/dog/Documents/van/wsi_samp/experiments/lusc-resnet_attn_mean_pool_uniform_25_hybrid/checkpoints/epoch=99-step=2300.ckpt
+
+model:
+  aggregator:
+    name: AttnMeanPoolAggregator
+    params:
+      in_dim: 1024
+
+  predictor:
+    name: LinearPredictor
+    params:
+      in_dim: 1024
+
+optimizer:
+  name: Adam
+  params:
+    lr: 1.0e-2
+    weight_decay: 1.0e-4
+    
+loss:
+  mil_loss:
+    name: BCE
+    params:
+      reduction: mean
+
+dataloader:
+  batch_size: 64           
+  num_workers: 32
+
+metrics:
+  train:
+    Accuracy:
+        task: "binary"
+        threshold: 0.5
+  val:
+    Accuracy:
+        task: "binary"
+        threshold: 0.5
+  test:
+    Accuracy:
+        task: "binary"
+        threshold: 0.5
+
+checkpointer:
+  save_last: true
+  save_top_k: 0
+  save_weights_only: true

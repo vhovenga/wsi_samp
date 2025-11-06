@@ -1,5 +1,5 @@
 seed: 42
-run_name: "lusc-luad_attn_mean_pool_uniform_25"
+run_name: "lusc-luad_resnet_attn_mean_pool_k-dpp_25"
 
 checkpoint: /home/dog/Documents/van/wsi_samp/experiments/lusc-luad_attn_mean_pool_frozen_baseline_25/checkpoints/epoch=99-step=300.ckpt
 
@@ -36,25 +36,20 @@ loss:
 
 samplers:
   train:
-    name: UniformSampler
+    name: FixedFeatureDppSampler
     params:
-      sample_size: 1024
-      with_replacement: false
+      method: "k_dpp"
+      k: 1024
 
   val:
     name: UseAllSampler
   test:
     name: UseAllSampler
 
-dataset:
-  tiles_parquet: "../data/tcga_luad_lusc/parquet/tiles.parquet"
-  labels_parquet: "../data/tcga_luad_lusc/parquet/slide_labels.parquet"
-  splits_parquet: "../data/tcga_luad_lusc/parquet/split_1_25train.parquet"
-  features_parquet: "../data/tcga_luad_lusc/parquet/features.parquet"
 
 dataloader:
   batch_size: 1
-  num_workers: 16
+  num_workers: 24
 
 trainer:
   max_epochs: 100
