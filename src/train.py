@@ -40,11 +40,11 @@ if __name__ == "__main__":
         tfm_norm
     ])
     patch_tfm_train = transforms.Compose([
+        transforms.ToTensor(),
         transforms.RandomHorizontalFlip(0.5),
         transforms.RandomVerticalFlip(0.5),
         transforms.RandomRotation(90),
         transforms.ColorJitter(0.2, 0.2, 0.2, 0.1),
-        transforms.ToTensor(),
         tfm_norm,
         transforms.RandomApply([transforms.ElasticTransform(alpha=50.0, sigma=5.0)], p=0.5)
     ])
