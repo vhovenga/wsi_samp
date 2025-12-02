@@ -1,0 +1,6 @@
+fetcher.cpp
+setup.py
+fetcher_cpp.egg-info/PKG-INFO
+fetcher_cpp.egg-info/SOURCES.txt
+fetcher_cpp.egg-info/dependency_links.txt
+fetcher_cpp.egg-info/top_level.txt

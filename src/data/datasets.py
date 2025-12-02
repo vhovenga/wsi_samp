@@ -11,6 +11,8 @@ import warnings
 from dataclasses import dataclass
 from typing import Union, Any, Dict, List, Optional, Sequence
 
+import fetcher_cpp 
+
 
 # ---------- Lightweight on-demand tile/feature view ----------
 class SlideFeatureView:
@@ -68,51 +70,67 @@ class SlideFeatureView:
     # -----------------------------
     # Fetch image tiles
     # -----------------------------
-    # def fetch_tiles(self, idxs: Optional[Sequence[int]] = None) -> torch.Tensor:
-    #     imgs = []
-    #     sel = idxs if idxs is not None else range(len(self.patch_uris))
-    #     for i in sel:
-    #         with Image.open(self.patch_uris[i]) as im:
-    #             im = im.convert(self.image_mode)
-    #             t = self.patch_transform(im) if self.patch_transform else TF.to_tensor(im)
-    #             imgs.append(t)
-    #     if not imgs:
-    #         return torch.empty((0, 3, 1, 1))
-    #     return torch.stack(imgs, 0)
+    def fetch_tiles(self, idxs: Optional[Sequence[int]] = None) -> torch.Tensor:
+        imgs = []
+        sel = idxs if idxs is not None else range(len(self.patch_uris))
+        for i in sel:
+            with Image.open(self.patch_uris[i]) as im:
+                im = im.convert(self.image_mode)
+                t = self.patch_transform(im) if self.patch_transform else TF.to_tensor(im)
+                imgs.append(t)
+        if not imgs:
+            return torch.empty((0, 3, 1, 1))
+        return torch.stack(imgs, 0)
 
+
+    # def fetch_tiles(self, idxs=None):
+    #     sel = list(idxs) if idxs is not None else list(range(len(self.patch_uris)))
+    #     n = len(sel)
+    #     if n == 0:
+    #         return torch.empty(0, 3, 1, 1)
+
+    #     # decode first tile to infer shape
+    #     buf0 = read_file(self.patch_uris[sel[0]])
+    #     img0 = decode_jpeg(buf0)             # uint8 [C,H,W]
+    #     C,H,W = img0.shape
+
+    #     # preallocate output
+    #     out = torch.empty((n, C, H, W), dtype=torch.float32)
+
+    #     # store tile 0
+    #     if self.patch_transform:
+    #         out[0] = self.patch_transform(img0)
+    #     else:
+    #         out[0] = img0.float().div_(255)
+
+    #     # fill rest
+    #     for j, k in enumerate(sel[1:], start=1):
+    #         buf = read_file(self.patch_uris[k])
+    #         img = decode_jpeg(buf)
+
+    #         if self.patch_transform:
+    #             out[j] = self.patch_transform(img)
+    #         else:
+    #             out[j] = img.float().div_(255)
+
+    #     return out
 
     def fetch_tiles(self, idxs=None):
         sel = list(idxs) if idxs is not None else list(range(len(self.patch_uris)))
-        n = len(sel)
-        if n == 0:
-            return torch.empty(0, 3, 1, 1)
+        if len(sel) == 0:
+            return torch.empty(0, 3, 1, 1, device="cuda", dtype=torch.float32)
 
-        # decode first tile to infer shape
-        buf0 = read_file(self.patch_uris[sel[0]])
-        img0 = decode_jpeg(buf0)             # uint8 [C,H,W]
-        C,H,W = img0.shape
+        # Gather paths
+        paths = [self.patch_uris[k] for k in sel]
 
-        # preallocate output
-        out = torch.empty((n, C, H, W), dtype=torch.float32)
+        # Decode all tiles on GPU [N,3,H,W] float32 CUDA
+        out = fetcher_cpp.decode_batch(paths)
 
-        # store tile 0
+        # Optional transform
         if self.patch_transform:
-            out[0] = self.patch_transform(img0)
-        else:
-            out[0] = img0.float().div_(255)
-
-        # fill rest
-        for j, k in enumerate(sel[1:], start=1):
-            buf = read_file(self.patch_uris[k])
-            img = decode_jpeg(buf)
-
-            if self.patch_transform:
-                out[j] = self.patch_transform(img)
-            else:
-                out[j] = img.float().div_(255)
+            out = self.patch_transform(out)
 
         return out
-    
     # -----------------------------
     # Unified feature loader
     # -----------------------------
