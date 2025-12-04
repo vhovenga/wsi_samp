@@ -144,3 +144,18 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("get_decode_time", &get_decode_time);
     m.def("reset_all", &reset_all_timers);
 }
+
+void reset_all() {
+    // destroy old state if it exists
+    if (g_initialized) {
+        nvjpegJpegStateDestroy(g_state);
+        nvjpegDestroy(g_handle);
+        g_initialized = false;
+    }
+
+    // rebuild fresh in this worker
+    check_nvjpeg(nvjpegCreateSimple(&g_handle), "nvjpegCreateSimple");
+    check_nvjpeg(nvjpegJpegStateCreate(g_handle, &g_state), "nvjpegJpegStateCreate");
+
+    g_initialized = true;
+}

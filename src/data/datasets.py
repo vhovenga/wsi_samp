@@ -67,20 +67,20 @@ class SlideFeatureView:
             return self.included_idxs[idxs]
         return idxs
 
-    # -----------------------------
-    # Fetch image tiles
-    # -----------------------------
-    def fetch_tiles(self, idxs: Optional[Sequence[int]] = None) -> torch.Tensor:
-        imgs = []
-        sel = idxs if idxs is not None else range(len(self.patch_uris))
-        for i in sel:
-            with Image.open(self.patch_uris[i]) as im:
-                im = im.convert(self.image_mode)
-                t = self.patch_transform(im) if self.patch_transform else TF.to_tensor(im)
-                imgs.append(t)
-        if not imgs:
-            return torch.empty((0, 3, 1, 1))
-        return torch.stack(imgs, 0)
+    # # -----------------------------
+    # # Fetch image tiles
+    # # -----------------------------
+    # def fetch_tiles(self, idxs: Optional[Sequence[int]] = None) -> torch.Tensor:
+    #     imgs = []
+    #     sel = idxs if idxs is not None else range(len(self.patch_uris))
+    #     for i in sel:
+    #         with Image.open(self.patch_uris[i]) as im:
+    #             im = im.convert(self.image_mode)
+    #             t = self.patch_transform(im) if self.patch_transform else TF.to_tensor(im)
+    #             imgs.append(t)
+    #     if not imgs:
+    #         return torch.empty((0, 3, 1, 1))
+    #     return torch.stack(imgs, 0)
 
 
     # def fetch_tiles(self, idxs=None):
@@ -350,7 +350,73 @@ class SlideDataset(Dataset):
             "view": view,
         }
 
+class PatchDataset(Dataset):
+    """
+    Flattened patch-level dataset for distributed feature extraction.
+    Accepts the same constructor signature as SlideDataset for API symmetry,
+    but only tiles_parquet, splits_parquet, split, image_mode, patch_transform
+    are operational.
+    """
 
+    def __init__(
+        self,
+        split: Union[str, Sequence[str]],
+        tiles_parquet: str = "tiles.parquet",
+        labels_parquet: str = "labels/slide_labels.parquet",      # unused
+        splits_parquet: str = "splits/fold1.parquet",
+        features_parquet: str = "features.parquet",               # unused
+        lowres_parquet: Optional[str] = None,                     # unused
+        image_mode: str = "RGB",
+        lowres_size: tuple[int, int] = (256, 256),                # unused
+        lowres_transform: Optional[Any] = None,                   # unused
+        patch_transform: Optional[Any] = None,
+        cache_lowres_in_ram: bool = True,                         # unused
+        task_type: str = "classification",                        # unused
+    ):
+        super().__init__()
+
+        self.image_mode = image_mode
+        self.patch_transform = patch_transform
+
+        # load parquet tables
+        tiles_df = pd.read_parquet(tiles_parquet)
+        splits_df = pd.read_parquet(splits_parquet)
+
+        # normalize split argument to a list
+        if isinstance(split, str):
+            split_values = [split]
+        else:
+            split_values = list(split)
+
+        # slide_ids belonging to the requested split(s)
+        split_ids = set(
+            splits_df.loc[splits_df["split"].isin(split_values), "slide_id"]
+        )
+
+        # filter patches: only included patches from selected slides
+        df = tiles_df[
+            (tiles_df["slide_id"].isin(split_ids)) &
+            (tiles_df["include"].astype(bool))
+        ].copy()
+
+        # canonical ordering to guarantee reproducibility
+        df = df.sort_values(["slide_id", "patch_grid_idx"]).reset_index(drop=True)
+
+        self.df = df
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        r = self.df.iloc[idx]
+
+        return {
+            "slide_id": r.slide_id,
+            "patch_idx": int(r.patch_grid_idx),
+            "coord": np.array([r.x, r.y], dtype=np.int64),
+            "patch_uri": r.patch_uri,
+        }
+    
 # ---------- Collate ----------
 def slide_collate(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     B = len(batch)
@@ -375,3 +441,33 @@ def slide_collate(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
         "views": [b["view"] for b in batch],
         "Ns": torch.tensor(Ns, dtype=torch.long),
     }
+
+def make_patch_collate(patch_transform=None):
+
+    def patch_collate(batch):
+        patch_uris = [b["patch_uri"] for b in batch]
+
+        # gpu decode
+        patches = fetcher_cpp.decode_batch(patch_uris)   # [B,3,H,W] float32 CUDA
+
+        # apply transform if provided
+        if patch_transform is not None:
+            patches = patch_transform(patches)
+
+        coords = np.stack([b["coord"] for b in batch], axis=0)
+        coords = torch.from_numpy(coords).float()
+        idxs = np.asarray([b["patch_idx"] for b in batch], dtype=np.int64)
+        patch_indices = torch.from_numpy(idxs)
+
+        return {
+            "slide_ids":     [b["slide_id"] for b in batch],
+            "patches":       patches,
+            "patch_uris":    patch_uris,
+            "coords":        coords,
+            "patch_indices": patch_indices,
+        }
+
+    return patch_collate
+
+def nvjpeg_worker_init(_):
+    fetcher_cpp.reset_all()

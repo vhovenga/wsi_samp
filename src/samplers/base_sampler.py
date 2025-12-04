@@ -69,7 +69,7 @@ class BaseSampler(nn.Module):
                     aux)
 
         C, H, W = fetched[0].shape[1:]
-        images_pad = fetched[0].new_zeros((B, Kmax, C, H, W)).pin_memory()
+        images_pad = fetched[0].new_zeros((B, Kmax, C, H, W))
         mask_pad   = torch.zeros((B, Kmax), dtype=torch.bool, device=device)
         for i, imgs in enumerate(fetched):
             k = imgs.shape[0]

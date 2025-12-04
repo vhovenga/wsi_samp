@@ -1,4 +1,6 @@
+from collections import defaultdict
 from typing import Dict, Any, List
+import os 
 import pytorch_lightning as pl
 import torch
 import numpy as np
@@ -6,6 +8,8 @@ import pandas as pd
 import h5py 
 from tqdm import tqdm 
 from pathlib import Path 
+import torch.distributed as dist
+from tqdm import tqdm
 
 from . import build_model
 from losses import build_loss
@@ -78,6 +82,8 @@ class LitMIL(pl.LightningModule):
         self.bag_modifier = (
             build_bag_modifier(bag_modifier_cfg) if bag_modifier_cfg is not None else None
         )
+
+        self._predict_index_buffer = []
 
     def on_fit_start(self):
         self.train_metrics = self.train_metrics.to(self.device)
@@ -235,82 +241,131 @@ class LitMIL(pl.LightningModule):
         return optimizer
     
 
+    def on_predict_start(self):
+        if torch.distributed.is_initialized():
+            self._rank = torch.distributed.get_rank()
+        else:
+            self._rank = 0
+
+        self._base = os.path.join(self.feature_out_dir, f"rank_{self._rank}")
+        os.makedirs(self._base, exist_ok=True)
+
+        self._slide_buffers = defaultdict(list)
+        self._slide_block_id = defaultdict(int)
+
+        self._flush_every = 1000000
+
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        """
-        Runs feature extraction for one slide (no sampling).
-        Safe for multi-GPU DDP when each rank processes disjoint slides.
-        Processes tiles in micro-batches to avoid OOM.
-        Also writes a Parquet index: [slide_id, feature_uri].
-        """
+        # feature extraction
+        f_mb = self.mil_module.feature_extractor(batch["patches"])
+        if f_mb.ndim == 4:
+            f_mb = f_mb.mean(dim=[2, 3])  # [B, D]
 
-        import pandas as pd
+        slide_ids     = batch["slide_ids"]                      # list of len B
+        patch_idxs    = batch["patch_indices"].cpu().tolist()   # [B]
+        coords        = batch["coords"].cpu().numpy()           # [B, 2]
+        feats_cpu     = f_mb.detach().cpu()                     # [B, D]
 
-        feature_out_dir = getattr(self, "feature_out_dir", None)
-        save_as = getattr(self, "save_as", "pt")
-        micro_k = getattr(self, "micro_k", 64)
+        # accumulate into slide-level buffers
+        for i in range(len(slide_ids)):
+            sid    = slide_ids[i]
+            pidx   = patch_idxs[i]
+            xy     = coords[i]
+            feat   = feats_cpu[i]
 
-        slide_id = batch["slide_ids"][0]
-        view = batch["views"][0]
-        patch_uris = view.patch_uris
-        coords = batch["coords_pad"][0, : len(patch_uris)].cpu().numpy()
+            self._slide_buffers[sid].append({
+                "patch_idx": pidx,
+                "coord": xy,
+                "feat": feat,
+            })
 
-        # --- Load all tiles for this slide (CPU tensor) ---
-        tiles = view.fetch_tiles()  # [N, C, H, W]
-        N = tiles.shape[0]
+        # flush if exceeding threshold
+        total_buffered = sum(len(v) for v in self._slide_buffers.values())
+        if total_buffered >= self._flush_every:
+            self._flush_slide_buffers()
 
-        # --- Forward in micro-batches ---
-        feats_chunks = []
-        for s in range(0, N, micro_k):
-            x_mb = tiles[s:s+micro_k].to(self.device, non_blocking=True)
-            f_mb = self.mil_module.feature_extractor(x_mb)
-            if f_mb.ndim == 4:
-                f_mb = f_mb.mean(dim=[2, 3])  # global avg pool
-            feats_chunks.append(f_mb.detach().cpu())
-            del x_mb, f_mb
-            torch.cuda.empty_cache()
+    def _flush_slide_buffers(self):
+        for sid, records in self._slide_buffers.items():
+            slide_dir = os.path.join(self._base, sid)
+            os.makedirs(slide_dir, exist_ok=True)
 
-        feats = torch.cat(feats_chunks, dim=0)  # [N, D]
-        patch_grid_idx = np.arange(len(patch_uris))
+            block_id = self._slide_block_id[sid]
+            out_path = os.path.join(slide_dir, f"block_{block_id:05d}.pt")
 
-        # --- Optionally save ---
-        if feature_out_dir is not None:
-            slide_dir = Path(feature_out_dir) / str(slide_id)
-            slide_dir.mkdir(parents=True, exist_ok=True)
+            # Write block. No read. No merge. No atomic rename needed.
+            torch.save(records, out_path)
 
-            if save_as == "pt":
-                feature_path = slide_dir / "features.pt"
-                torch.save(
-                    {
-                        "features": feats,
-                        "coords": torch.from_numpy(coords),
-                        "patch_grid_idx": torch.from_numpy(patch_grid_idx),
-                    },
-                    feature_path,
-                )
-            elif save_as == "h5":
-                feature_path = slide_dir / "features.h5"
-                with h5py.File(feature_path, "w") as f:
-                    f.create_dataset("features", data=feats.numpy(), compression="gzip")
-                    f.create_dataset("coords", data=coords)
-                    f.create_dataset("patch_grid_idx", data=patch_grid_idx)
-            else:
-                raise ValueError("save_as must be 'pt' or 'h5'")
+            self._slide_block_id[sid] += 1
 
-            # --- Write / append to Parquet index ---
-            df = pd.DataFrame([{"slide_id": slide_id, "feature_uri": str(feature_path)}])
-            parquet_path = Path(feature_out_dir) / "features.parquet"
+        self._slide_buffers.clear()
 
-            if parquet_path.exists():
-                # append
-                existing = pd.read_parquet(parquet_path)
-                combined = pd.concat([existing, df], ignore_index=True)
-                combined.to_parquet(parquet_path, index=False)
-            else:
-                df.to_parquet(parquet_path, index=False)
+    def on_predict_end(self):
+        from multiprocessing import Pool, cpu_count
 
-        return {
-            "slide_id": slide_id,
-            "features": feats,
-            "coords": coords,
-            "patch_grid_idx": patch_grid_idx,
-        }
+        if self._slide_buffers:
+            self._flush_slide_buffers()
+
+        if dist.is_available() and dist.is_initialized():
+            dist.barrier()
+
+        if self._rank != 0:
+            return
+
+        base = self.feature_out_dir
+        rank_dirs = [
+            os.path.join(base, d)
+            for d in os.listdir(base)
+            if d.startswith("rank_")
+        ]
+
+        slides = set()
+        for rdir in rank_dirs:
+            for sid in os.listdir(rdir):
+                if os.path.isdir(os.path.join(rdir, sid)):
+                    slides.add(sid)
+        slides = sorted(slides)
+
+        out_root = base
+        tasks = [(sid, rank_dirs, out_root) for sid in slides]
+
+        workers = min(32, cpu_count())
+
+        with Pool(processes=workers) as pool:
+            for _ in tqdm(
+                pool.imap_unordered(_merge_worker, tasks),
+                total=len(tasks),
+                ncols=80,
+                desc="Merging slides"
+            ):
+                pass
+
+        for r in rank_dirs:
+            os.rmdir(r)
+
+def _merge_worker(args):
+    sid, rank_dirs, out_root = args
+    merged = []
+
+    for rdir in rank_dirs:
+        sdir = os.path.join(rdir, sid)
+        if not os.path.isdir(sdir):
+            continue
+
+        blocks = sorted(
+            b for b in os.listdir(sdir)
+            if b.endswith(".pt")
+        )
+
+        for blk in blocks:
+            path = os.path.join(sdir, blk)
+            recs = torch.load(path, map_location="cpu", weights_only=False)
+            merged.extend(recs)
+            os.remove(path)
+
+        os.rmdir(sdir)
+
+    final_dir = os.path.join(out_root, sid)
+    os.makedirs(final_dir, exist_ok=True)
+    torch.save(merged, os.path.join(final_dir, "features.pt"))
+
+    return sid

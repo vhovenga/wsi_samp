@@ -9,6 +9,10 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from torch.profiler import schedule, tensorboard_trace_handler
 from torchvision import transforms
 
+import torch.nn as nn
+import kornia.augmentation as K
+import kornia.enhance as KE
+
 from models.lit_module import LitMIL
 from data.datasets import SlideDataset, slide_collate
 
@@ -32,25 +36,59 @@ if __name__ == "__main__":
     # -----------------------------
     # Transforms
     # -----------------------------
-    tfm_norm = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                    std=[0.229, 0.224, 0.225])
 
+    # -------------------------
+    # TorchVision normalization
+    # -------------------------
+    tfm_norm = transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225],
+    )
+
+    # -------------------------
+    # LOW-RES PIPELINE (CPU)
+    # -------------------------
     lowres_tfm_train = transforms.Compose([
         transforms.ToTensor(),
-        tfm_norm
-    ])
-    patch_tfm_train = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.RandomHorizontalFlip(0.5),
-        transforms.RandomVerticalFlip(0.5),
-        transforms.RandomRotation(90),
-        transforms.ColorJitter(0.2, 0.2, 0.2, 0.1),
         tfm_norm,
-        transforms.RandomApply([transforms.ElasticTransform(alpha=50.0, sigma=5.0)], p=0.5)
     ])
 
-    lowres_tfm_val = transforms.Compose([transforms.ToTensor(), tfm_norm])
-    patch_tfm_val = transforms.Compose([transforms.ToTensor(), tfm_norm])
+    lowres_tfm_val = transforms.Compose([
+        transforms.ToTensor(),
+        tfm_norm,
+    ])
+
+    # -------------------------
+    # PATCH PIPELINE (KORNIA GPU)
+    # -------------------------
+
+
+    patch_tfm_train = nn.Sequential(
+        K.RandomHorizontalFlip(p=0.5),
+        K.RandomVerticalFlip(p=0.5),
+        K.RandomRotation(degrees=90.0, p=1.0),
+        K.ColorJitter(0.2, 0.2, 0.2, 0.1, p=1.0),
+        KE.Normalize(
+            mean=torch.tensor([0.485, 0.456, 0.406]),
+            std=torch.tensor([0.229, 0.224, 0.225]),
+        ),
+        K.RandomElasticTransform(
+            kernel_size=(63, 63),   # needed for sigma=5
+            sigma=torch.tensor([5.0, 5.0]),
+            p=0.5,
+        ),
+    )
+
+    # -------------------------
+    # VALIDATION PATCH PIPELINE
+    # -------------------------
+    # Val uses no augmentation; just PIL->tensor then Kornia normalize
+    patch_tfm_val = nn.Sequential(
+        KE.Normalize(
+            mean=torch.tensor([0.485, 0.456, 0.406]),
+            std=torch.tensor([0.229, 0.224, 0.225]),
+        )
+    )
 
     # -----------------------------
     # Datasets / Dataloaders
@@ -112,7 +150,11 @@ if __name__ == "__main__":
 
     logger = TensorBoardLogger("../experiments", name=run_name) if use_logger else False
 
-    checkpointer = module_cfg.get("checkpointer", None)
+    if not trainer_cfg.get("enable_checkpointing", True):
+        checkpointer = None 
+    else:
+        checkpointer = module_cfg.get("checkpointer", None)
+
     checkpoint_cb = (
         ModelCheckpoint(
             dirpath=f"../experiments/{run_name}/checkpoints/",

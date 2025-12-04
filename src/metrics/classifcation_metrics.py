@@ -61,7 +61,7 @@ class AUROCMetric(BaseMetric):
     def __init__(self, **kwargs):
         super().__init__(name="AUROC")
         task = kwargs.get("task", "binary")
-        self.metric = AUROC(**kwargs)
+        self.metric = AUROC(**kwargs, sync_on_compute=False)
 
         if task == "binary":
             self._transform = _to_probs_binary
