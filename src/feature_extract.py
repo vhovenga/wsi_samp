@@ -6,17 +6,20 @@ from pathlib import Path
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from torchvision import transforms
+import torch.nn as nn
+import kornia.enhance as KE
+from torch.utils.data import Subset
 
 from models.lit_module import LitMIL
-from data.datasets import SlideDataset, slide_collate
+from data.datasets import PatchDataset, nvjpeg_worker_init, make_patch_collate as patch_collate
 
 
-def predict_with_features(trainer, model, dataloader, feature_out_dir, save_as="pt", micro_k=64):
+def predict_with_features(trainer, model, dataloader, feature_out_dir, save_as="pt"):
     # Set attributes that predict_step will read
     model.feature_out_dir = feature_out_dir
     model.save_as = save_as
-    model.micro_k = micro_k
     trainer.predict(model, dataloaders=dataloader)
+
 
 
 if __name__ == "__main__":
@@ -27,7 +30,6 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt", type=str, required=True, help="Path to checkpoint (.ckpt).")
     parser.add_argument("--feature_out_dir", type=str, required=True, help="Output directory for features.")
     parser.add_argument("--save_as", type=str, default="pt", choices=["pt", "h5"])
-    parser.add_argument("--micro_k", type=int, default=64)
     args = parser.parse_args()
 
     # -----------------------------
@@ -43,22 +45,23 @@ if __name__ == "__main__":
     # -----------------------------
     # Transforms (normalized ResNet-style)
     # -----------------------------
-    tfm_norm = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                    std=[0.229, 0.224, 0.225])
+    patch_tfm = nn.Sequential(
+        KE.Normalize(
+            mean=torch.tensor([0.485, 0.456, 0.406]),
+            std=torch.tensor([0.229, 0.224, 0.225]),
+        )
+    )
 
     lowres_tfm = transforms.Compose([
         transforms.ToTensor(),
-        tfm_norm,
-    ])
-    patch_tfm = transforms.Compose([
-        transforms.ToTensor(),
-        tfm_norm,
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                    std=[0.229, 0.224, 0.225])
     ])
 
     # -----------------------------
     # Dataset / Dataloader
     # -----------------------------
-    dataset = SlideDataset(
+    dataset = PatchDataset(
         **data_cfg,
         split=["train", "val"],  # or "test" as needed
         lowres_transform=lowres_tfm,
@@ -67,11 +70,10 @@ if __name__ == "__main__":
 
     dataloader = DataLoader(
         dataset,
-        batch_size=1,
-        shuffle=False,
-        pin_memory=True,
-        collate_fn=slide_collate,
-    )
+        batch_size=5000,
+        pin_memory=False,
+        collate_fn=patch_collate(patch_tfm)
+        )
 
     # -----------------------------
     # Load model from checkpoint
@@ -87,10 +89,11 @@ if __name__ == "__main__":
         strategy=trainer_cfg.get("strategy", None),
         logger=False,
         enable_checkpointing=False,
-    )
+        use_distributed_sampler=True
+        )
 
     # -----------------------------
     # Run prediction (feature extraction)
     # -----------------------------
     Path(args.feature_out_dir).mkdir(parents=True, exist_ok=True)
-    predict_with_features(trainer, model, dataloader, args.feature_out_dir, args.save_as, args.micro_k)
+    predict_with_features(trainer, model, dataloader, args.feature_out_dir, args.save_as)
