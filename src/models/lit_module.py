@@ -238,9 +238,26 @@ class LitMIL(pl.LightningModule):
         opt_params = self.opt_cfg.get("params", {})
         opt_cls = getattr(torch.optim, opt_name)
         optimizer = opt_cls(params, **opt_params)
-        return optimizer
-    
 
+        sched_cfg = self.opt_cfg.get("scheduler", None)
+        if sched_cfg is None:
+            return optimizer
+
+        sched_name = sched_cfg["name"]
+        sched_params = sched_cfg.get("params", {})
+        sched_cls = getattr(torch.optim.lr_scheduler, sched_name)
+        scheduler = sched_cls(optimizer, **sched_params)
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": sched_cfg.get("interval", "epoch"),   # "step" or "epoch"
+                "frequency": sched_cfg.get("frequency", 1),
+                "monitor": sched_cfg.get("monitor", None),
+            },
+        }
+    
     def on_predict_start(self):
         if torch.distributed.is_initialized():
             self._rank = torch.distributed.get_rank()

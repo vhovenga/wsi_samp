@@ -224,6 +224,7 @@ class SlideDataset(Dataset):
         assert task_type in {"classification", "regression"}, f"Invalid task_type: {task_type}"
         self.task_type = task_type
         self.image_mode = image_mode
+        self.lowres_parquet = lowres_parquet
         self.lowres_size = lowres_size
         self.lowres_transform = lowres_transform
         self.patch_transform = patch_transform
@@ -333,7 +334,10 @@ class SlideDataset(Dataset):
     # ---------- Get item ----------
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         rec = self.records[idx]
-        lowres = self._load_lowres(rec)
+        if self.lowres_parquet is not None:
+            lowres = self._load_lowres(rec)
+        else:
+            lowres = torch.zeros(3, *self.lowres_size, dtype=torch.float32)
         dtype = torch.float if self.task_type == "regression" else torch.long
         view = SlideFeatureView(
             patch_uris=rec.patch_uris,

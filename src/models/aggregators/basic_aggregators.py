@@ -78,6 +78,7 @@ class AttnMeanPoolAggregator(nn.Module):
         mask: torch.Tensor = None,     # [B, K] optional
         return_attn: bool = False,     # optional for debugging
     ):
+
         assert feats.dim() == 3, f"Expected (B,K,D), got {feats.shape}"
         B, K, D = feats.shape
         assert D == self.in_dim, f"in_dim mismatch: {self.in_dim} vs {D}"
@@ -102,7 +103,7 @@ class AttnMeanPoolAggregator(nn.Module):
         attn_weights = attn_weights / (attn_weights.sum(dim=1, keepdim=True) + 1e-8)
 
         # Weighted mean
-        bag_emb = torch.sum(feats * attn_weights.unsqueeze(-1), dim=1)  # [B,D]
+        bag_emb = torch.bmm(attn_weights.unsqueeze(1), feats).squeeze(1)   # [B,D]
 
         if return_attn:
             return bag_emb, attn_weights
