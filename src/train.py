@@ -148,24 +148,31 @@ if __name__ == "__main__":
     use_logger = trainer_cfg.pop("logger", True)
     run_name = module_cfg.get("run_name", "mil_run")
 
-    logger = TensorBoardLogger("../experiments", name=run_name) if use_logger else False
+    # -----------------------------
+    # Logger (Lightning will create version_i)
+    # -----------------------------
+    logger = TensorBoardLogger("../experiments", name=run_name) if use_logger else None
 
-    if not trainer_cfg.get("enable_checkpointing", True):
-        checkpointer = None 
+    # ../experiments/<run_name>/version_i/
+    log_dir = logger.log_dir if logger is not None else f"../experiments/{run_name}"
+
+    # -----------------------------
+    # Checkpoint callback inside version_i folder
+    # -----------------------------
+    if trainer_cfg.get("enable_checkpointing", True):
+        checkpointer_cfg = module_cfg.get("checkpointer", None)
+
+        if checkpointer_cfg is not None:
+            checkpoint_cb = ModelCheckpoint(
+                dirpath=f"{log_dir}/checkpoints",
+                **checkpointer_cfg.get("params", {}),
+            )
+        else:
+            checkpoint_cb = None
     else:
-        checkpointer = module_cfg.get("checkpointer", None)
+        checkpoint_cb = None
 
-    checkpoint_cb = (
-        ModelCheckpoint(
-            dirpath=f"../experiments/{run_name}/checkpoints/",
-            **checkpointer.get("params", {}),
-        )
-        if checkpointer is not None
-        else None
-    )
-
-    callbacks = [checkpoint_cb] if checkpoint_cb else []
-
+    callbacks = [checkpoint_cb] if checkpoint_cb is not None else []
     trainer = pl.Trainer(
         logger=logger,
         callbacks=callbacks,
