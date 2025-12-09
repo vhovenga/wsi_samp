@@ -173,6 +173,7 @@ if __name__ == "__main__":
         checkpoint_cb = None
 
     callbacks = [checkpoint_cb] if checkpoint_cb is not None else []
+
     trainer = pl.Trainer(
         logger=logger,
         callbacks=callbacks,
